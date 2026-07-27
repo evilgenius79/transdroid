@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:torrent="http://xmlns.example.com/torrent/1.0">
+  <channel>
+    <title>Linux ISO releases</title>
+    <link>https://example.com/</link>
+    <item>
+      <title>ubuntu-24.04.2-desktop-amd64.iso</title>
+      <link>https://example.com/torrents/1</link>
+      <enclosure url="https://example.com/torrents/1.torrent" type="application/x-bittorrent" length="6114656256" />
+      <pubDate>Sun, 26 Jul 2026 10:00:01 GMT</pubDate>
+    </item>
+    <item>
+      <title>debian-12.7.0-amd64-netinst.iso</title>
+      <link>https://example.com/torrents/2</link>
+      <torrent:magnetURI>magnet:?xt=urn:btih:2aa4f5a7e209e54b32803d43670971c4c8caaa05</torrent:magnetURI>
+      <pubDate>Sat, 25 Jul 2026 09:30:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>archlinux-2025.07.01-x86_64.iso</title>
+      <link>https://example.com/torrents/3</link>
+    </item>
+  </channel>
+</rss>

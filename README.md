@@ -41,12 +41,31 @@ area:
 * **Verified** — protocol and app unit tests pass, Android lint is clean, and debug plus
   minified R8 release builds succeed for both flavors.
 
+* **Search** (plan Phase 5) — in-app torrent search built as an extension point: a
+  `SearchProvider` interface in the protocol module with a **Torznab** implementation, so
+  one Jackett or Prowlarr endpoint unlocks hundreds of indexers. Providers (endpoint +
+  API key) are stored encrypted; results sort by seeders and send straight to the active
+  server. Gated to the `full` flavor via `search_available`.
+* **RSS feeds** — subscribe to torrent RSS/Atom feeds, see new items highlighted, and
+  send entries to your client with one tap. Feed URLs (which often embed private
+  passkeys) live in the same encrypted store as server credentials. `full` flavor only.
+* **Notifications** — an opt-in background check (WorkManager, ~15 min interval) that
+  notifies when torrents finish, with proper Android 13+ notification-permission
+  handling.
+* **Home screen widget** — a Glance widget with the active server's torrent counts and
+  total speeds, refreshed by both foreground use and the background check.
+* **More ways to add** — open or share magnet links, open `.torrent` files from file
+  managers and browsers, pick a `.torrent` file in-app, or paste a URL. Plus torrent
+  list sorting (date added, name, download speed, ratio).
+* **Release pipeline** — tag-triggered GitHub Releases with signed APKs (signing via
+  repository secrets, unsigned fallback), `dependenciesInfo` and VCS metadata stripped
+  from APKs per F-Droid reproducible-build requirements.
 * **Contributor docs** (plan Phase 6) — [CONTRIBUTING.md](CONTRIBUTING.md) documents the
   build, the module layout and the adapter interface as the extension point for adding
   more torrent clients.
 
-Not yet done: torrent search (plan Phase 5), RSS, widgets, notifications, and F-Droid
-reproducible-build/release setup. See the [roadmap](transdroid3_plan.md#roadmap).
+Not yet done: F-Droid store metadata/inclusion, translations, and the remaining
+Transdroid 2 client adapters. See the [roadmap](transdroid3_plan.md#roadmap).
 
 About the rewrite
 =================

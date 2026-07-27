@@ -31,6 +31,8 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.transdroid.AppContainer
 import org.transdroid.appContainer
+import org.transdroid.background.FinishedTorrentsWorker
+import org.transdroid.data.SearchProviderConfig
 import org.transdroid.data.ServerProfile
 import org.transdroid.ui.torrents.UiError
 import org.transdroid.ui.torrents.toUiError
@@ -87,6 +89,32 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
 
     fun resetTestState() {
         _testState.value = TestState.Idle
+    }
+
+    val searchProviders: StateFlow<List<SearchProviderConfig>> = container.profilesRepository.searchProviders
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    fun saveSearchProvider(provider: SearchProviderConfig) {
+        viewModelScope.launch { container.profilesRepository.saveSearchProvider(provider) }
+    }
+
+    fun deleteSearchProvider(providerId: String) {
+        viewModelScope.launch { container.profilesRepository.deleteSearchProvider(providerId) }
+    }
+
+    val notifyFinished: StateFlow<Boolean> = container.settingsRepository.notifyFinished
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    /** Persists the toggle and (un)schedules the background check accordingly. */
+    fun setNotifyFinished(context: android.content.Context, enabled: Boolean) {
+        viewModelScope.launch {
+            container.settingsRepository.setNotifyFinished(enabled)
+            if (enabled) {
+                FinishedTorrentsWorker.schedule(context.applicationContext)
+            } else {
+                FinishedTorrentsWorker.cancel(context.applicationContext)
+            }
+        }
     }
 
     companion object {

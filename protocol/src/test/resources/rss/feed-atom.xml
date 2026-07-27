@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Nightly builds</title>
+  <entry>
+    <title>nightly-2026-07-26</title>
+    <link rel="alternate" href="https://example.com/builds/2026-07-26" />
+    <link rel="enclosure" href="https://example.com/builds/2026-07-26.torrent" type="application/x-bittorrent" />
+    <updated>2026-07-26T10:00:01Z</updated>
+  </entry>
+  <entry>
+    <title>nightly-2026-07-25</title>
+    <link href="https://example.com/builds/2026-07-25" />
+    <updated>2026-07-25T10:00:01Z</updated>
+  </entry>
+</feed>

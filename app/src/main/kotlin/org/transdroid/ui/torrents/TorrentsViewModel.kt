@@ -22,6 +22,7 @@ import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.AP
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -64,6 +65,17 @@ enum class TorrentFilter {
     }
 }
 
+enum class TorrentSort {
+    DATE_ADDED, NAME, DOWNLOAD_SPEED, RATIO;
+
+    fun comparator(): Comparator<Torrent> = when (this) {
+        DATE_ADDED -> compareByDescending { it.addedTimestamp ?: Long.MIN_VALUE }
+        NAME -> compareBy { it.name.lowercase() }
+        DOWNLOAD_SPEED -> compareByDescending { it.downloadRate }
+        RATIO -> compareByDescending { it.ratio }
+    }
+}
+
 data class TorrentsUiState(
     val activeProfile: ServerProfile? = null,
     /** False until the profile store has emitted, so we don't flash the welcome screen. */
@@ -74,11 +86,12 @@ data class TorrentsUiState(
     val refreshing: Boolean = false,
     val error: UiError? = null,
     val filter: TorrentFilter = TorrentFilter.ALL,
+    val sort: TorrentSort = TorrentSort.DATE_ADDED,
     val selectedTorrentId: String? = null,
     val files: Map<String, List<TorrentFile>> = emptyMap(),
 ) {
     val visibleTorrents: List<Torrent>
-        get() = torrents.filter(filter::matches)
+        get() = torrents.filter(filter::matches).sortedWith(sort.comparator().thenBy { it.name.lowercase() })
 
     val selectedTorrent: Torrent?
         get() = torrents.firstOrNull { it.id == selectedTorrentId }
@@ -125,18 +138,24 @@ class TorrentsViewModel(private val container: AppContainer) : ViewModel() {
         if (showSpinner) _ui.update { it.copy(refreshing = true) }
         try {
             val torrents = container.adapterFor(profile).listTorrents()
-                .sortedWith(compareByDescending<Torrent> { it.addedTimestamp ?: Long.MIN_VALUE }.thenBy { it.name })
             _ui.update {
                 if (it.activeProfile?.id != profile.id) it
                 else it.copy(torrents = torrents, hasLoaded = true, refreshing = false, error = null)
             }
-        } catch (e: DaemonException) {
+            container.widgetStateRepository.update(profile.displayName, torrents)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
             _ui.update { it.copy(refreshing = false, error = e.toUiError(profile.host)) }
         }
     }
 
     fun setFilter(filter: TorrentFilter) {
         _ui.update { it.copy(filter = filter) }
+    }
+
+    fun setSort(sort: TorrentSort) {
+        _ui.update { it.copy(sort = sort) }
     }
 
     fun select(torrentId: String?) {
@@ -159,7 +178,9 @@ class TorrentsViewModel(private val container: AppContainer) : ViewModel() {
             try {
                 val files = container.adapterFor(profile).listFiles(torrentId)
                 _ui.update { it.copy(files = it.files + (torrentId to files)) }
-            } catch (e: DaemonException) {
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
                 // Leave the files section empty; the list-level error banner covers connectivity
             }
         }
@@ -173,7 +194,25 @@ class TorrentsViewModel(private val container: AppContainer) : ViewModel() {
                 container.adapterFor(profile).addByUrl(url)
                 refreshNow(showSpinner = false)
                 onResult(null)
-            } catch (e: DaemonException) {
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                onResult(e.toUiError(profile.host))
+            }
+        }
+    }
+
+    /** Adds a torrent from the raw contents of a .torrent file. */
+    fun addFile(fileName: String, contents: ByteArray, onResult: (UiError?) -> Unit) {
+        val profile = _ui.value.activeProfile ?: return
+        viewModelScope.launch {
+            try {
+                container.adapterFor(profile).addByFile(fileName, contents)
+                refreshNow(showSpinner = false)
+                onResult(null)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
                 onResult(e.toUiError(profile.host))
             }
         }
@@ -185,7 +224,9 @@ class TorrentsViewModel(private val container: AppContainer) : ViewModel() {
             try {
                 action(container.adapterFor(profile))
                 refreshNow(showSpinner = false)
-            } catch (e: DaemonException) {
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
                 _ui.update { it.copy(error = e.toUiError(profile.host)) }
             }
         }

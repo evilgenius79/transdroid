@@ -46,6 +46,15 @@ Use the existing adapters as references — Transmission (JSON-RPC), qBittorrent
 cookie auth), rTorrent (XML-RPC) and Deluge (web JSON-RPC) cover most protocol shapes a
 new client is likely to need.
 
+## Other extension points
+
+- **Search providers** implement `org.transdroid.protocol.search.SearchProvider`. The
+  shipped `TorznabProvider` covers Jackett/Prowlarr; a provider for another API follows
+  the same pattern (pure JVM, fixture-tested, results expose a `torrentUrl` a daemon
+  adapter can consume).
+- **Feed handling** lives in `org.transdroid.protocol.rss.RssFetcher`; extend it there
+  (with fixtures) rather than in the UI layer if a tracker's dialect needs special-casing.
+
 Guidelines:
 
 - Keep adapters free of Android imports; the `:protocol` module must stay pure JVM.

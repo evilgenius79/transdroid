@@ -26,6 +26,11 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import org.transdroid.ui.add.AddTorrentScreen
+import org.transdroid.ui.rss.RssFeedsScreen
+import org.transdroid.ui.rss.RssItemsScreen
+import org.transdroid.ui.rss.RssViewModel
+import org.transdroid.ui.search.SearchScreen
+import org.transdroid.ui.search.SearchViewModel
 import org.transdroid.ui.settings.EditServerScreen
 import org.transdroid.ui.settings.SettingsScreen
 import org.transdroid.ui.settings.SettingsViewModel
@@ -39,12 +44,16 @@ object Routes {
     const val ADD = "add?url={url}"
     const val SETTINGS = "settings"
     const val EDIT_SERVER = "settings/server/{id}"
+    const val RSS = "rss"
+    const val RSS_ITEMS = "rss/{feedId}"
+    const val SEARCH = "search"
 
     const val NEW_SERVER_ID = "new"
 
     fun torrentDetails(id: String) = "torrent/${Uri.encode(id)}"
     fun add(url: String?) = if (url == null) "add" else "add?url=${Uri.encode(url)}"
     fun editServer(id: String?) = "settings/server/${Uri.encode(id ?: NEW_SERVER_ID)}"
+    fun rssItems(feedId: String) = "rss/${Uri.encode(feedId)}"
 }
 
 @Composable
@@ -56,6 +65,8 @@ fun TransdroidApp(
     val navController = rememberNavController()
     val torrentsViewModel: TorrentsViewModel = viewModel(factory = TorrentsViewModel.Factory)
     val settingsViewModel: SettingsViewModel = viewModel(factory = SettingsViewModel.Factory)
+    val rssViewModel: RssViewModel = viewModel(factory = RssViewModel.Factory)
+    val searchViewModel: SearchViewModel = viewModel(factory = SearchViewModel.Factory)
 
     LaunchedEffect(pendingTorrentUrl) {
         if (pendingTorrentUrl != null) {
@@ -75,6 +86,31 @@ fun TransdroidApp(
                 },
                 onAddTorrent = { navController.navigate(Routes.add(null)) },
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
+                onOpenRss = { navController.navigate(Routes.RSS) },
+                onOpenSearch = { navController.navigate(Routes.SEARCH) },
+            )
+        }
+        composable(Routes.RSS) {
+            RssFeedsScreen(
+                viewModel = rssViewModel,
+                onOpenFeed = { feedId -> navController.navigate(Routes.rssItems(feedId)) },
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(
+            Routes.RSS_ITEMS,
+            arguments = listOf(navArgument("feedId") { type = NavType.StringType }),
+        ) { entry ->
+            RssItemsScreen(
+                viewModel = rssViewModel,
+                feedId = entry.arguments?.getString("feedId").orEmpty(),
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(Routes.SEARCH) {
+            SearchScreen(
+                viewModel = searchViewModel,
+                onBack = { navController.popBackStack() },
             )
         }
         composable(

@@ -2,4 +2,6 @@
 <resources>
     <!-- Feature gates for the lite (Google Play) flavor -->
     <bool name="updatecheck_available">false</bool>
+    <bool name="search_available">false</bool>
+    <bool name="rss_available">false</bool>
 </resources>

@@ -132,7 +132,9 @@ class TransmissionAdapter(
     }
 
     private fun kotlinx.serialization.json.JsonObjectBuilder.putIds(torrentId: String) {
-        put("ids", buildJsonArray { add(torrentId.toInt()) })
+        val id = torrentId.toIntOrNull()
+            ?: throw DaemonException.UnexpectedResponse("Not a Transmission torrent id: $torrentId")
+        put("ids", buildJsonArray { add(id) })
     }
 
     /** Sends one RPC request, retrying once after a 409 session-id challenge. */

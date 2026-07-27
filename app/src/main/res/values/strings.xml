@@ -56,13 +56,40 @@
     <string name="priority_normal">Normal priority</string>
     <string name="priority_high">High priority</string>
 
+    <!-- Sorting -->
+    <string name="sort_title">Sort</string>
+    <string name="sort_date_added">Date added</string>
+    <string name="sort_name">Name</string>
+    <string name="sort_download_speed">Download speed</string>
+    <string name="sort_ratio">Ratio</string>
+
     <!-- Add torrent -->
     <string name="add_title">Add torrent</string>
     <string name="add_url_label">Magnet link or torrent URL</string>
     <string name="add_url_hint">magnet:?xt=urn:btih:…</string>
+    <string name="add_pick_file">Choose a .torrent file…</string>
+    <string name="add_file_read_failed">Could not read that file</string>
     <string name="add_button">Add to %1$s</string>
     <string name="add_success">Torrent added</string>
     <string name="add_invalid">Enter a magnet link or http(s) URL to a torrent file</string>
+
+    <!-- RSS -->
+    <string name="rss_title">RSS feeds</string>
+    <string name="rss_empty">Add an RSS feed to see new torrents here</string>
+    <string name="rss_add_feed">Add feed</string>
+    <string name="rss_delete_feed">Delete feed</string>
+    <string name="rss_feed_url">Feed URL</string>
+    <string name="rss_no_items">No items in this feed</string>
+    <string name="rss_new">New</string>
+    <string name="rss_add_item_title">Send to your torrent client?</string>
+
+    <!-- Search -->
+    <string name="search_title">Search</string>
+    <string name="search_hint">Search torrents</string>
+    <string name="search_provider">Indexer</string>
+    <string name="search_no_providers">Add a Torznab indexer (Jackett or Prowlarr) in Settings to search</string>
+    <string name="search_no_results">No results</string>
+    <string name="search_seeders">%1$d seeders · %2$d leechers</string>
 
     <!-- Server settings -->
     <string name="settings_title">Settings</string>
@@ -91,10 +118,30 @@
     <string name="settings_invalid_host">Enter a host name</string>
     <string name="settings_invalid_port">Enter a valid port number (1–65535)</string>
     <string name="settings_about">Transdroid %1$s — GNU GPL v3</string>
+    <string name="settings_notifications">Notifications</string>
+    <string name="settings_notify_finished">Notify when torrents finish</string>
+    <string name="settings_notify_finished_summary">Checks the active server about every 15 minutes</string>
+    <string name="settings_search_providers">Search indexers</string>
+    <string name="settings_add_search_provider">Add Torznab indexer</string>
+    <string name="settings_edit_search_provider">Edit indexer</string>
+    <string name="settings_torznab_url">Torznab endpoint URL</string>
+    <string name="settings_torznab_url_hint">http://host:9117/api/v2.0/indexers/all/results/torznab</string>
+    <string name="settings_api_key">API key</string>
+
+    <!-- Notifications -->
+    <string name="notification_channel_finished">Finished torrents</string>
+
+    <!-- Widget -->
+    <string name="widget_description">Torrent counts and speeds of your active server</string>
 
     <!-- Errors -->
     <string name="error_connection">Cannot connect to %1$s</string>
     <string name="error_authentication">The server rejected the user name or password</string>
     <string name="error_unexpected">Unexpected reply from the server</string>
+
+    <plurals name="notification_finished_title">
+        <item quantity="one">Torrent finished</item>
+        <item quantity="other">%d torrents finished</item>
+    </plurals>
 
 </resources>

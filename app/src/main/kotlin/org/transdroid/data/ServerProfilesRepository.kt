@@ -62,6 +62,46 @@ class ServerProfilesRepository(context: Context) {
         }
     }
 
+    val feeds: Flow<List<RssFeed>> = dataStore.data.map { it.feeds }
+
+    suspend fun saveFeed(feed: RssFeed) {
+        dataStore.updateData { data ->
+            val existing = data.feeds.indexOfFirst { it.id == feed.id }
+            val updated = if (existing >= 0) {
+                data.feeds.toMutableList().also { it[existing] = feed }
+            } else {
+                data.feeds + feed
+            }
+            data.copy(feeds = updated)
+        }
+    }
+
+    suspend fun deleteFeed(feedId: String) {
+        dataStore.updateData { data ->
+            data.copy(feeds = data.feeds.filterNot { it.id == feedId })
+        }
+    }
+
+    val searchProviders: Flow<List<SearchProviderConfig>> = dataStore.data.map { it.searchProviders }
+
+    suspend fun saveSearchProvider(provider: SearchProviderConfig) {
+        dataStore.updateData { data ->
+            val existing = data.searchProviders.indexOfFirst { it.id == provider.id }
+            val updated = if (existing >= 0) {
+                data.searchProviders.toMutableList().also { it[existing] = provider }
+            } else {
+                data.searchProviders + provider
+            }
+            data.copy(searchProviders = updated)
+        }
+    }
+
+    suspend fun deleteSearchProvider(providerId: String) {
+        dataStore.updateData { data ->
+            data.copy(searchProviders = data.searchProviders.filterNot { it.id == providerId })
+        }
+    }
+
     private object EncryptedProfilesSerializer : Serializer<ProfilesData> {
 
         private val json = Json { ignoreUnknownKeys = true }

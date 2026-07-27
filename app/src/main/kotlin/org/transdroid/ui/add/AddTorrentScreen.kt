@@ -16,6 +16,11 @@
  */
 package org.transdroid.ui.add
 
+import android.content.Context
+import android.net.Uri
+import android.provider.OpenableColumns
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,11 +29,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -37,16 +45,24 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.transdroid.R
 import org.transdroid.ui.message
 import org.transdroid.ui.torrents.TorrentsViewModel
 import org.transdroid.ui.torrents.UiError
-import androidx.compose.ui.unit.dp
+
+/** .torrent files are tiny; anything larger than this is not one. */
+private const val MAX_TORRENT_FILE_BYTES = 10L * 1024 * 1024
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,10 +72,57 @@ fun AddTorrentScreen(
     onDone: () -> Unit,
 ) {
     val ui by viewModel.ui.collectAsStateWithLifecycle()
-    var url by rememberSaveable { mutableStateOf(initialUrl) }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    val initialIsFile = initialUrl.startsWith("content:") || initialUrl.startsWith("file:")
+    var url by rememberSaveable { mutableStateOf(if (initialIsFile) "" else initialUrl) }
+    var fileUri by rememberSaveable { mutableStateOf(if (initialIsFile) initialUrl else null) }
     var invalidInput by rememberSaveable { mutableStateOf(false) }
     var submitting by rememberSaveable { mutableStateOf(false) }
     var error by remember { mutableStateOf<UiError?>(null) }
+    var fileReadFailed by remember { mutableStateOf(false) }
+
+    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            fileUri = uri.toString()
+            invalidInput = false
+        }
+    }
+
+    fun submit() {
+        val pickedFile = fileUri
+        error = null
+        fileReadFailed = false
+        if (pickedFile != null) {
+            submitting = true
+            scope.launch {
+                val contents = withContext(Dispatchers.IO) { readTorrentFile(context, Uri.parse(pickedFile)) }
+                if (contents == null) {
+                    submitting = false
+                    fileReadFailed = true
+                } else {
+                    viewModel.addFile(contents.first, contents.second) { result ->
+                        submitting = false
+                        if (result == null) onDone() else error = result
+                    }
+                }
+            }
+            return
+        }
+        val trimmed = url.trim()
+        val valid = trimmed.startsWith("magnet:") ||
+            trimmed.startsWith("http://") || trimmed.startsWith("https://")
+        if (!valid) {
+            invalidInput = true
+        } else {
+            submitting = true
+            viewModel.add(trimmed) { result ->
+                submitting = false
+                if (result == null) onDone() else error = result
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -82,49 +145,90 @@ fun AddTorrentScreen(
                 .fillMaxSize()
                 .padding(16.dp),
         ) {
-            OutlinedTextField(
-                value = url,
-                onValueChange = {
-                    url = it
-                    invalidInput = false
-                },
-                label = { Text(stringResource(R.string.add_url_label)) },
-                placeholder = { Text(stringResource(R.string.add_url_hint)) },
-                isError = invalidInput,
-                supportingText = if (invalidInput) {
-                    { Text(stringResource(R.string.add_invalid)) }
-                } else {
-                    null
-                },
-                minLines = 3,
-                modifier = Modifier.fillMaxWidth(),
-            )
+            val pickedFile = fileUri
+            if (pickedFile == null) {
+                OutlinedTextField(
+                    value = url,
+                    onValueChange = {
+                        url = it
+                        invalidInput = false
+                    },
+                    label = { Text(stringResource(R.string.add_url_label)) },
+                    placeholder = { Text(stringResource(R.string.add_url_hint)) },
+                    isError = invalidInput,
+                    supportingText = if (invalidInput) {
+                        { Text(stringResource(R.string.add_invalid)) }
+                    } else {
+                        null
+                    },
+                    minLines = 3,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(12.dp))
+                OutlinedButton(
+                    onClick = {
+                        filePicker.launch(arrayOf("application/x-bittorrent", "application/octet-stream"))
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.add_pick_file))
+                }
+            } else {
+                AssistChip(
+                    onClick = {},
+                    label = { Text(displayName(context, Uri.parse(pickedFile))) },
+                    trailingIcon = {
+                        IconButton(onClick = { fileUri = null }) {
+                            Icon(Icons.Default.Close, contentDescription = stringResource(R.string.details_cancel))
+                        }
+                    },
+                )
+            }
+            if (fileReadFailed) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    stringResource(R.string.add_file_read_failed),
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
             error?.let {
                 Spacer(Modifier.height(8.dp))
                 Text(it.message(), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
             }
             Spacer(Modifier.height(16.dp))
             Button(
-                onClick = {
-                    val trimmed = url.trim()
-                    val valid = trimmed.startsWith("magnet:") ||
-                        trimmed.startsWith("http://") || trimmed.startsWith("https://")
-                    if (!valid) {
-                        invalidInput = true
-                    } else {
-                        submitting = true
-                        error = null
-                        viewModel.add(trimmed) { result ->
-                            submitting = false
-                            if (result == null) onDone() else error = result
-                        }
-                    }
-                },
-                enabled = !submitting && ui.activeProfile != null && url.isNotBlank(),
+                onClick = { submit() },
+                enabled = !submitting && ui.activeProfile != null && (url.isNotBlank() || fileUri != null),
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(stringResource(R.string.add_button, ui.activeProfile?.displayName ?: ""))
             }
         }
     }
+}
+
+/** Reads the picked .torrent file, returning (fileName, contents) or null on failure. */
+private fun readTorrentFile(context: Context, uri: Uri): Pair<String, ByteArray>? = try {
+    context.contentResolver.openInputStream(uri)?.use { stream ->
+        val contents = stream.readBytes()
+        if (contents.isEmpty() || contents.size > MAX_TORRENT_FILE_BYTES) null
+        else displayName(context, uri) to contents
+    }
+} catch (e: Exception) {
+    null
+}
+
+private fun displayName(context: Context, uri: Uri): String {
+    try {
+        context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (index >= 0) cursor.getString(index)?.let { return it }
+            }
+        }
+    } catch (e: Exception) {
+        // Fall through to the path-based name
+    }
+    return uri.lastPathSegment ?: "file.torrent"
 }

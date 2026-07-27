@@ -169,7 +169,6 @@ fun TorrentDetailsContent(
                     if (paused) Icons.Default.PlayArrow else Icons.Default.Pause,
                     contentDescription = null,
                 )
-                Spacer(Modifier.height(0.dp))
                 Text(
                     " " + stringResource(if (paused) R.string.details_start else R.string.details_pause)
                 )

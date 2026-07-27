@@ -32,13 +32,18 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Dns
+import androidx.compose.material.icons.filled.RssFeed
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
@@ -46,6 +51,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -55,8 +61,12 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.booleanResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -82,8 +92,12 @@ fun TorrentsScreen(
     onOpenDetails: (String) -> Unit,
     onAddTorrent: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenRss: () -> Unit,
+    onOpenSearch: () -> Unit,
 ) {
     val ui by viewModel.ui.collectAsStateWithLifecycle()
+    val rssAvailable = booleanResource(R.bool.rss_available)
+    val searchAvailable = booleanResource(R.bool.search_available)
 
     // Poll the daemon while this screen is started; stops automatically when backgrounded
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -109,6 +123,17 @@ fun TorrentsScreen(
                     }
                 },
                 actions = {
+                    if (searchAvailable) {
+                        IconButton(onClick = onOpenSearch) {
+                            Icon(Icons.Default.Search, contentDescription = stringResource(R.string.search_title))
+                        }
+                    }
+                    if (rssAvailable) {
+                        IconButton(onClick = onOpenRss) {
+                            Icon(Icons.Default.RssFeed, contentDescription = stringResource(R.string.rss_title))
+                        }
+                    }
+                    SortMenuButton(current = ui.sort, onSelect = { viewModel.setSort(it) })
                     IconButton(onClick = onOpenSettings) {
                         Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.torrents_settings))
                     }
@@ -216,6 +241,38 @@ private fun TorrentListContent(
         }
     }
 }
+
+@Composable
+private fun SortMenuButton(current: TorrentSort, onSelect: (TorrentSort) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    IconButton(onClick = { expanded = true }) {
+        Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = stringResource(R.string.sort_title))
+    }
+    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        TorrentSort.entries.forEach { sort ->
+            DropdownMenuItem(
+                text = { Text(sort.label()) },
+                leadingIcon = {
+                    RadioButton(selected = sort == current, onClick = null)
+                },
+                onClick = {
+                    onSelect(sort)
+                    expanded = false
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun TorrentSort.label(): String = stringResource(
+    when (this) {
+        TorrentSort.DATE_ADDED -> R.string.sort_date_added
+        TorrentSort.NAME -> R.string.sort_name
+        TorrentSort.DOWNLOAD_SPEED -> R.string.sort_download_speed
+        TorrentSort.RATIO -> R.string.sort_ratio
+    }
+)
 
 @Composable
 private fun TorrentFilter.label(): String = stringResource(

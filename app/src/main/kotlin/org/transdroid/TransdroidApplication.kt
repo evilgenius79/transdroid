@@ -18,21 +18,30 @@ package org.transdroid
 
 import android.app.Application
 import android.content.Context
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import org.transdroid.background.FinishedTorrentsWorker
 import org.transdroid.data.ServerProfile
 import org.transdroid.data.ServerProfilesRepository
 import org.transdroid.data.SettingsRepository
 import org.transdroid.protocol.DaemonAdapter
 import org.transdroid.protocol.DaemonAdapterFactory
+import org.transdroid.protocol.rss.RssFetcher
+import org.transdroid.widget.WidgetStateRepository
 
 /** Lightweight manual dependency container; see the v3 plan's "keep DI light" decision. */
 class AppContainer(context: Context) {
 
     val profilesRepository = ServerProfilesRepository(context)
     val settingsRepository = SettingsRepository(context)
+    val widgetStateRepository = WidgetStateRepository(context)
 
-    private val httpClient = DaemonAdapterFactory.defaultHttpClient()
+    val httpClient = DaemonAdapterFactory.defaultHttpClient()
+    val rssFetcher = RssFetcher(httpClient)
 
     private var cachedAdapter: Pair<ServerProfile, DaemonAdapter>? = null
 
@@ -66,6 +75,12 @@ class TransdroidApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+        // Re-arm the periodic finished-torrents check after updates/reboots; KEEP is idempotent
+        CoroutineScope(Dispatchers.Default).launch {
+            if (container.settingsRepository.notifyFinished.first()) {
+                FinishedTorrentsWorker.schedule(this@TransdroidApplication)
+            }
+        }
     }
 }
 

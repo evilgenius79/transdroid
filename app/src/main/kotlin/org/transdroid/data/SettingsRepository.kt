@@ -17,9 +17,10 @@
 package org.transdroid.data
 
 import android.content.Context
-import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -30,12 +31,30 @@ private val Context.settingsDataStore by preferencesDataStore(name = "settings")
 class SettingsRepository(private val context: Context) {
 
     private val activeServerKey = stringPreferencesKey("active_server_id")
+    private val notifyFinishedKey = booleanPreferencesKey("notify_finished")
 
     val activeServerId: Flow<String?> = context.settingsDataStore.data.map { it[activeServerKey] }
 
     suspend fun setActiveServer(profileId: String?) {
-        context.settingsDataStore.edit { settings: androidx.datastore.preferences.core.MutablePreferences ->
+        context.settingsDataStore.edit { settings ->
             if (profileId == null) settings.remove(activeServerKey) else settings[activeServerKey] = profileId
         }
     }
+
+    /** Whether the background finished-torrent check and its notifications are enabled. */
+    val notifyFinished: Flow<Boolean> = context.settingsDataStore.data.map { it[notifyFinishedKey] ?: false }
+
+    suspend fun setNotifyFinished(enabled: Boolean) {
+        context.settingsDataStore.edit { it[notifyFinishedKey] = enabled }
+    }
+
+    /** Ids of torrents seen unfinished on the last background check, per server profile. */
+    fun unfinishedTorrentIds(profileId: String): Flow<Set<String>> =
+        context.settingsDataStore.data.map { it[unfinishedKey(profileId)] ?: emptySet() }
+
+    suspend fun setUnfinishedTorrentIds(profileId: String, ids: Set<String>) {
+        context.settingsDataStore.edit { it[unfinishedKey(profileId)] = ids }
+    }
+
+    private fun unfinishedKey(profileId: String) = stringSetPreferencesKey("unfinished_ids_$profileId")
 }

@@ -56,9 +56,11 @@ class MainActivity : ComponentActivity() {
         extractTorrentUrl(intent)?.let { pendingTorrentUrl = it }
     }
 
-    /** Pulls a magnet link or torrent URL out of VIEW/SEND intents, if any. */
+    /** Pulls a magnet link, torrent URL or .torrent content URI out of VIEW/SEND intents. */
     private fun extractTorrentUrl(intent: Intent?): String? = when (intent?.action) {
-        Intent.ACTION_VIEW -> intent.dataString?.takeIf { it.startsWith("magnet:") }
+        Intent.ACTION_VIEW -> intent.dataString?.takeIf {
+            it.startsWith("magnet:") || it.startsWith("content:") || it.startsWith("file:")
+        }
         Intent.ACTION_SEND -> intent.getStringExtra(Intent.EXTRA_TEXT)?.trim()?.takeIf {
             it.startsWith("magnet:") || it.startsWith("http://") || it.startsWith("https://")
         }

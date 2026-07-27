@@ -51,8 +51,38 @@ data class ServerProfile(
     )
 }
 
+/**
+ * One RSS feed subscription. Stored encrypted because private feed URLs commonly embed
+ * per-user passkeys.
+ */
+@Serializable
+data class RssFeed(
+    val id: String,
+    val name: String,
+    val url: String,
+    /** Publication time (unix seconds) of the newest item the user has seen. */
+    val lastViewedTimestamp: Long? = null,
+) {
+    val displayName: String
+        get() = name.ifBlank { url }
+}
+
+/** One configured Torznab search endpoint (Jackett/Prowlarr). Stored encrypted (API key). */
+@Serializable
+data class SearchProviderConfig(
+    val id: String,
+    val name: String,
+    val url: String,
+    val apiKey: String = "",
+) {
+    val displayName: String
+        get() = name.ifBlank { url }
+}
+
 /** Root object stored in the encrypted profiles DataStore. */
 @Serializable
 data class ProfilesData(
     val profiles: List<ServerProfile> = emptyList(),
+    val feeds: List<RssFeed> = emptyList(),
+    val searchProviders: List<SearchProviderConfig> = emptyList(),
 )

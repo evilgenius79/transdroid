@@ -16,13 +16,11 @@
  */
 package org.transdroid.protocol.rtorrent
 
-import java.io.StringReader
 import java.util.Base64
-import javax.xml.parsers.DocumentBuilderFactory
 import org.transdroid.protocol.DaemonException
+import org.transdroid.protocol.internal.childElements
+import org.transdroid.protocol.internal.parseXmlSafely
 import org.w3c.dom.Element
-import org.w3c.dom.Node
-import org.xml.sax.InputSource
 
 /**
  * Minimal XML-RPC codec covering what rTorrent needs: string, int/i4/i8, boolean, double,
@@ -67,10 +65,7 @@ internal object XmlRpc {
     /** Parses a methodResponse, returning its single value; XML-RPC faults become exceptions. */
     fun parseResponse(xml: String): Any? {
         val document = try {
-            DocumentBuilderFactory.newInstance().apply {
-                setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
-                isExpandEntityReferences = false
-            }.newDocumentBuilder().parse(InputSource(StringReader(xml)))
+            parseXmlSafely(xml)
         } catch (e: Exception) {
             throw DaemonException.UnexpectedResponse("Not an XML-RPC response", e)
         }
@@ -109,16 +104,6 @@ internal object XmlRpc {
             }
             else -> typed.textContent
         }
-    }
-
-    private fun Element.childElements(): List<Element> {
-        val result = mutableListOf<Element>()
-        var child: Node? = firstChild
-        while (child != null) {
-            if (child is Element) result.add(child)
-            child = child.nextSibling
-        }
-        return result
     }
 
     private fun escape(text: String): String = text
