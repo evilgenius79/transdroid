@@ -29,6 +29,7 @@ import java.io.OutputStream
 import javax.crypto.AEADBadTagException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.retryWhen
 import kotlinx.serialization.json.Json
@@ -46,10 +47,19 @@ class ServerProfilesRepository(context: Context, cipher: ProfilesCipher = Keysto
         produceFile = { context.dataStoreFile(FILE_NAME) },
     )
 
-    /** The store's data, retrying briefly when the Keystore is transiently unavailable. */
-    private val data: Flow<ProfilesData> = dataStore.data.retryWhen { cause, attempt ->
-        (cause is IOException && attempt < 3).also { retrying -> if (retrying) delay(250 * (attempt + 1)) }
-    }
+    /**
+     * The store's data, retrying briefly when the Keystore is transiently unavailable.
+     * If it stays broken past the retries, fall back to an empty view instead of letting
+     * the exception crash every collector — the data on disk is untouched and reappears
+     * once the Keystore recovers (typically next app start).
+     */
+    private val data: Flow<ProfilesData> = dataStore.data
+        .retryWhen { cause, attempt ->
+            (cause is IOException && attempt < 3).also { retrying -> if (retrying) delay(250 * (attempt + 1)) }
+        }
+        .catch { cause ->
+            if (cause is IOException) emit(ProfilesData()) else throw cause
+        }
 
     val profiles: Flow<List<ServerProfile>> = data.map { it.profiles }
 

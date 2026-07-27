@@ -16,7 +16,6 @@
  */
 package org.transdroid.protocol.discovery
 
-import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -59,7 +58,8 @@ object DaemonProbe {
     private suspend fun probeQbittorrent(client: OkHttpClient, host: String, port: Int): DiscoveredDaemon? =
         tryRequest(client, Request.Builder().url("http://$host:$port/api/v2/app/webapiVersion").get().build()) { response ->
             val body = if (response.code == 200) response.body?.string().orEmpty() else ""
-            val versionLike = response.code == 200 && body.length in 1..16 && body.trim().first().isDigit()
+            val versionLike = response.code == 200 && body.length in 1..16 &&
+                body.trim().firstOrNull()?.isDigit() == true
             // 403 means the endpoint exists but wants the SID cookie first
             if (versionLike || response.code == 403) DiscoveredDaemon(DaemonType.QBITTORRENT, host, port) else null
         }
@@ -80,6 +80,10 @@ object DaemonProbe {
         }
     }
 
+    /**
+     * One misbehaving LAN device must never abort the whole scan, so any failure —
+     * transport or a response too strange to parse — just means "not this daemon".
+     */
     private suspend fun tryRequest(
         client: OkHttpClient,
         request: Request,
@@ -87,7 +91,9 @@ object DaemonProbe {
     ): DiscoveredDaemon? = withContext(Dispatchers.IO) {
         try {
             client.newCall(request).execute().use(handle)
-        } catch (e: IOException) {
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
             null
         }
     }

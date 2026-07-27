@@ -107,13 +107,14 @@ class RtorrentAdapter(
             addedTimestamp = num(13).takeIf { it > 0 },
             downloadDir = str(14).takeIf { it.isNotBlank() },
             error = message,
-            // ruTorrent stores its label URL-encoded in custom1
-            labels = str(16).takeIf { it.isNotBlank() }?.let {
+            // ruTorrent stores its label encodeURIComponent-encoded in custom1; that
+            // encoding leaves "+" literal, so protect it from URLDecoder's plus-to-space
+            labels = str(16).takeIf { it.isNotBlank() }?.let { raw ->
                 listOf(
                     try {
-                        URLDecoder.decode(it, "UTF-8")
+                        URLDecoder.decode(raw.replace("+", "%2B"), "UTF-8")
                     } catch (e: IllegalArgumentException) {
-                        it
+                        raw
                     }
                 )
             } ?: emptyList(),

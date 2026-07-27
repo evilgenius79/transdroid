@@ -18,14 +18,12 @@ package org.transdroid.protocol
 
 import java.net.InetSocketAddress
 import java.net.Socket
-import java.security.KeyStore
 import java.security.MessageDigest
 import java.security.cert.CertificateException
 import java.security.cert.X509Certificate
 import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLSocket
 import javax.net.ssl.SSLSocketFactory
-import javax.net.ssl.TrustManagerFactory
 import javax.net.ssl.X509TrustManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -44,10 +42,12 @@ data class CertificateFingerprint(
 object Tls {
 
     /**
-     * Wraps [base] so TLS also accepts the one certificate whose SHA-256 equals
-     * [certSha256] (lowercase hex), on top of normal CA validation. Used for
-     * self-signed servers the user explicitly trusted. Hostname verification is
-     * relaxed because the certificate identity itself is pinned exactly.
+     * Wraps [base] so TLS accepts ONLY the certificate whose SHA-256 equals [certSha256]
+     * (lowercase hex) — nothing else, not even CA-valid chains. Hostname verification is
+     * safe to relax precisely because trust can only come from the exact pinned
+     * certificate: an attacker cannot substitute any other identity, CA-signed or not,
+     * without failing the pin. (A CA fallback here would let any publicly valid
+     * certificate bypass the disabled hostname check and MITM the connection.)
      */
     fun clientWithPinnedCertificate(base: okhttp3.OkHttpClient, certSha256: String): okhttp3.OkHttpClient {
         val trustManager = PinnedTrustManager(certSha256.lowercase())
@@ -99,32 +99,23 @@ object Tls {
 }
 
 /**
- * Trusts the platform's CAs plus exactly one explicitly pinned certificate. If the platform
- * rejects the chain, the leaf is accepted only when its SHA-256 matches the pin.
+ * Trusts exactly one certificate: the explicitly pinned one. Deliberately no CA fallback —
+ * combined with the relaxed hostname verifier, a CA path would let any publicly valid
+ * certificate impersonate the pinned server.
  */
 private class PinnedTrustManager(private val pinnedSha256: String) : X509TrustManager {
-
-    private val platformTrustManager: X509TrustManager =
-        TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
-            .apply { init(null as KeyStore?) }
-            .trustManagers
-            .filterIsInstance<X509TrustManager>()
-            .first()
 
     override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {
         throw CertificateException("Client certificates are not supported")
     }
 
     override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {
-        try {
-            platformTrustManager.checkServerTrusted(chain, authType)
-        } catch (e: CertificateException) {
-            val leaf = chain.firstOrNull() ?: throw e
-            if (Tls.sha256Hex(leaf.encoded) != pinnedSha256) {
-                throw CertificateException("Server certificate does not match the pinned fingerprint")
-            }
+        val leaf = chain.firstOrNull()
+            ?: throw CertificateException("Server sent no certificate")
+        if (Tls.sha256Hex(leaf.encoded) != pinnedSha256) {
+            throw CertificateException("Server certificate does not match the pinned fingerprint")
         }
     }
 
-    override fun getAcceptedIssuers(): Array<X509Certificate> = platformTrustManager.acceptedIssuers
+    override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
 }

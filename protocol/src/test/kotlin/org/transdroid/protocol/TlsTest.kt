@@ -91,6 +91,32 @@ class TlsTest {
     }
 
     @Test
+    fun `a CA-style different certificate is rejected even though hostname checks are relaxed`() = runTest {
+        // Simulates the MITM case: the attacker presents a different, otherwise-valid
+        // certificate; strict pinning must reject it regardless of CA validity
+        val otherCertificate = HeldCertificate.Builder()
+            .addSubjectAlternativeName("localhost")
+            .commonName("attacker")
+            .build()
+        val otherServer = MockWebServer()
+        otherServer.useHttps(
+            HandshakeCertificates.Builder().heldCertificate(otherCertificate).build().sslSocketFactory(),
+            false,
+        )
+        otherServer.start()
+        otherServer.enqueue(MockResponse().setBody("mitm"))
+
+        val client = Tls.clientWithPinnedCertificate(OkHttpClient(), certSha256)
+        try {
+            client.newCall(Request.Builder().url(otherServer.url("/")).build()).execute()
+            fail("Expected SSLException")
+        } catch (expected: SSLException) {
+        } finally {
+            otherServer.shutdown()
+        }
+    }
+
+    @Test
     fun `fetchCertificate reads the fingerprint without trusting anything`() = runTest {
         val fingerprint = Tls.fetchCertificate(server.hostName, server.port)
 

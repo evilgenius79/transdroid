@@ -156,7 +156,11 @@ class TorrentsViewModel(private val container: AppContainer) : ViewModel() {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            _ui.update { it.copy(refreshing = false, error = e.toUiError(profile.host)) }
+            _ui.update {
+                // A late failure from a server the user already switched away from is stale
+                if (it.activeProfile?.id != profile.id) it
+                else it.copy(refreshing = false, error = e.toUiError(profile.host))
+            }
         }
     }
 

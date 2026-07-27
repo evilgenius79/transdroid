@@ -106,8 +106,10 @@ fun EditServerScreen(
         onDispose { viewModel.resetTestState() }
     }
 
-    // Adding a new server: look around the local network for daemons to offer
-    if (existing == null) {
+    // Adding a new server: look around the local network for daemons to offer.
+    // Keyed on the nav argument, not `existing` — the profiles flow hasn't emitted on
+    // first composition, so `existing` is briefly null even when editing.
+    if (serverId == null) {
         LaunchedEffect(Unit) { viewModel.startLanScan() }
     }
 
@@ -165,7 +167,7 @@ fun EditServerScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            if (existing == null && (discovery.scanning || discovery.found.isNotEmpty())) {
+            if (serverId == null && (discovery.scanning || discovery.found.isNotEmpty())) {
                 DiscoverySection(
                     state = discovery,
                     onPick = { daemon ->

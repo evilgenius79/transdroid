@@ -67,7 +67,7 @@ class QbittorrentAdapter(
 
     override suspend fun addByUrl(url: String) {
         val form = FormBody.Builder().add("urls", url).build()
-        post("api/v2/torrents/add", form).use { it.readBodyOrThrow() }
+        post("api/v2/torrents/add", form).use { it.checkAddSucceeded() }
     }
 
     override suspend fun addByFile(fileName: String, contents: ByteArray) {
@@ -78,7 +78,14 @@ class QbittorrentAdapter(
                 contents.toRequestBody("application/x-bittorrent".toMediaType()),
             )
             .build()
-        post("api/v2/torrents/add", body).use { it.readBodyOrThrow() }
+        post("api/v2/torrents/add", body).use { it.checkAddSucceeded() }
+    }
+
+    /** torrents/add reports failure as HTTP 200 with the body "Fails." */
+    private fun Response.checkAddSucceeded() {
+        if (readBodyOrThrow().trim() == "Fails.") {
+            throw DaemonException.UnexpectedResponse("qBittorrent could not add that torrent")
+        }
     }
 
     override suspend fun start(torrentId: String) {
