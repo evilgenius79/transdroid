@@ -22,12 +22,13 @@ area:
   installable debug APK as a build artifact (see the
   [Actions tab](../../actions), bottom of the latest run, artifact
   `transdroid-full-debug`).
-* **Protocol layer** (plan Phase 1 + part of Phase 4) — a new pure-JVM `:protocol` module
-  defines one normalized `DaemonAdapter` interface plus torrent/file models, with working
-  adapters for **Transmission** (JSON-RPC, 409 session-id handshake, basic auth) and
-  **qBittorrent** (Web API v2 cookie auth, compatible with both 4.x `pause/resume` and
-  5.x `stop/start` endpoints). All protocol behavior is unit-tested against recorded
-  fixture responses; no emulator or real daemon needed.
+* **Protocol layer** (plan Phases 1 and 4) — a new pure-JVM `:protocol` module defines one
+  normalized `DaemonAdapter` interface plus torrent/file models, with working adapters for
+  **Transmission** (JSON-RPC, 409 session-id handshake, basic auth), **qBittorrent**
+  (Web API v2 cookie auth, compatible with both 4.x `pause/resume` and 5.x `stop/start`
+  endpoints), **rTorrent** (XML-RPC over HTTP with a hardened minimal codec) and
+  **Deluge** (Web UI JSON-RPC with session re-authentication). All protocol behavior is
+  unit-tested against recorded fixture responses; no emulator or real daemon needed.
 * **App UI** (plan Phase 2 + Phase 3) — Jetpack Compose with Material 3 in the classic
   grey-green Transdroid identity: torrent list with automatic 5-second refresh, status
   filters and pull-to-refresh; torrent details with start/pause/remove (optionally
@@ -40,8 +41,12 @@ area:
 * **Verified** — protocol and app unit tests pass, Android lint is clean, and debug plus
   minified R8 release builds succeed for both flavors.
 
-Not yet done: rTorrent and Deluge adapters, torrent search, RSS, widgets, notifications,
-and F-Droid reproducible-build/release setup. See the [roadmap](transdroid3_plan.md#roadmap).
+* **Contributor docs** (plan Phase 6) — [CONTRIBUTING.md](CONTRIBUTING.md) documents the
+  build, the module layout and the adapter interface as the extension point for adding
+  more torrent clients.
+
+Not yet done: torrent search (plan Phase 5), RSS, widgets, notifications, and F-Droid
+reproducible-build/release setup. See the [roadmap](transdroid3_plan.md#roadmap).
 
 About the rewrite
 =================
@@ -67,10 +72,12 @@ Supported clients
 | --- | --- |
 | Transmission | ✅ Supported (RPC over JSON, session-id handshake, basic auth) |
 | qBittorrent | ✅ Supported (Web API v2, works with qBittorrent 4.1+ and 5.x) |
-| rTorrent, Deluge | Planned (see the [roadmap](transdroid3_plan.md#roadmap)) |
+| rTorrent | ✅ Supported (XML-RPC over HTTP, e.g. /RPC2 behind a web server or ruTorrent) |
+| Deluge | ✅ Supported (Web UI JSON-RPC, Deluge 1.3 and 2.x) |
 
 The remaining Transdroid 2 adapters are out of scope for the initial v3 release; community
-contributions can revive them once the adapter interface stabilizes.
+contributions can revive them once the adapter interface stabilizes — see
+[CONTRIBUTING.md](CONTRIBUTING.md) for how to add an adapter.
 
 Building
 ========

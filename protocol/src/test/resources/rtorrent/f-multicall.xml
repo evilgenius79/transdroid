@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<methodResponse>
+  <params><param><value><array><data>
+    <value><array><data>
+      <value><string>linux-distro/disc1.iso</string></value>
+      <value><i8>4700000000</i8></value>
+      <value><i8>100</i8></value>
+      <value><i8>100</i8></value>
+      <value><i8>2</i8></value>
+    </data></array></value>
+    <value><array><data>
+      <value><string>linux-distro/disc2.iso</string></value>
+      <value><i8>4700000000</i8></value>
+      <value><i8>25</i8></value>
+      <value><i8>100</i8></value>
+      <value><i8>1</i8></value>
+    </data></array></value>
+    <value><array><data>
+      <value><string>linux-distro/README.txt</string></value>
+      <value><i8>2048</i8></value>
+      <value><i8>0</i8></value>
+      <value><i8>1</i8></value>
+      <value><i8>0</i8></value>
+    </data></array></value>
+  </data></array></value></param></params>
+</methodResponse>

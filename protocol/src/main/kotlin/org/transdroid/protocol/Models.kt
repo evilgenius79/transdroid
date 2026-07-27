@@ -20,6 +20,8 @@ package org.transdroid.protocol
 enum class DaemonType(val defaultPort: Int, val defaultSslPort: Int) {
     TRANSMISSION(9091, 443),
     QBITTORRENT(8080, 443),
+    RTORRENT(80, 443),
+    DELUGE(8112, 443),
 }
 
 /**

@@ -79,6 +79,8 @@
     <string name="settings_path">Path</string>
     <string name="settings_path_hint_transmission">Default: /transmission/rpc</string>
     <string name="settings_path_hint_qbittorrent">Base path, usually empty</string>
+    <string name="settings_path_hint_rtorrent">Default: /RPC2</string>
+    <string name="settings_path_hint_deluge">Base path of the Web UI, usually empty</string>
     <string name="settings_username">User name (optional)</string>
     <string name="settings_password">Password</string>
     <string name="settings_save">Save</string>

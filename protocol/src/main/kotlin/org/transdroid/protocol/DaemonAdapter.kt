@@ -18,7 +18,9 @@ package org.transdroid.protocol
 
 import java.util.concurrent.TimeUnit
 import okhttp3.OkHttpClient
+import org.transdroid.protocol.deluge.DelugeAdapter
 import org.transdroid.protocol.qbittorrent.QbittorrentAdapter
+import org.transdroid.protocol.rtorrent.RtorrentAdapter
 import org.transdroid.protocol.transmission.TransmissionAdapter
 
 /**
@@ -62,5 +64,7 @@ object DaemonAdapterFactory {
         when (config.type) {
             DaemonType.TRANSMISSION -> TransmissionAdapter(config, httpClient)
             DaemonType.QBITTORRENT -> QbittorrentAdapter(config, httpClient)
+            DaemonType.RTORRENT -> RtorrentAdapter(config, httpClient)
+            DaemonType.DELUGE -> DelugeAdapter(config, httpClient)
         }
 }

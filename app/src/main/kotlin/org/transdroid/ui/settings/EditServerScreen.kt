@@ -232,6 +232,8 @@ fun EditServerScreen(
                             when (type) {
                                 DaemonType.TRANSMISSION -> R.string.settings_path_hint_transmission
                                 DaemonType.QBITTORRENT -> R.string.settings_path_hint_qbittorrent
+                                DaemonType.RTORRENT -> R.string.settings_path_hint_rtorrent
+                                DaemonType.DELUGE -> R.string.settings_path_hint_deluge
                             }
                         )
                     )
@@ -304,4 +306,6 @@ fun EditServerScreen(
 private fun DaemonType.displayName(): String = when (this) {
     DaemonType.TRANSMISSION -> "Transmission"
     DaemonType.QBITTORRENT -> "qBittorrent"
+    DaemonType.RTORRENT -> "rTorrent"
+    DaemonType.DELUGE -> "Deluge"
 }
