@@ -24,6 +24,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -59,6 +60,8 @@ class RssViewModel(private val container: AppContainer) : ViewModel() {
     private val _items = MutableStateFlow(RssItemsUiState())
     val items: StateFlow<RssItemsUiState> = _items.asStateFlow()
 
+    private var fetchJob: Job? = null
+
     fun newFeedId(): String = UUID.randomUUID().toString()
 
     fun saveFeed(feed: RssFeed) {
@@ -83,15 +86,17 @@ class RssViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     private fun openFeed(feed: RssFeed) {
+        // Cancel any still-running fetch so a slow previous feed cannot overwrite this one
+        fetchJob?.cancel()
         _items.value = RssItemsUiState(feed = feed, loading = true, newSinceTimestamp = feed.lastViewedTimestamp)
-        viewModelScope.launch {
+        fetchJob = viewModelScope.launch {
             try {
                 val channel = container.rssFetcher.fetch(feed.url)
                 val items = channel.items.sortedByDescending { it.timestamp ?: Long.MIN_VALUE }
                 _items.update { it.copy(loading = false, items = items) }
                 val newest = items.firstNotNullOfOrNull { item -> item.timestamp }
                 if (newest != null && newest != feed.lastViewedTimestamp) {
-                    container.profilesRepository.saveFeed(feed.copy(lastViewedTimestamp = newest))
+                    container.profilesRepository.markFeedViewed(feed.id, newest)
                 }
             } catch (e: CancellationException) {
                 throw e

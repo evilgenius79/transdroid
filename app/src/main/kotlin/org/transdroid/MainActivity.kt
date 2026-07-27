@@ -38,7 +38,13 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        pendingTorrentUrl = extractTorrentUrl(intent)
+        // Only read the launch intent on a fresh start; on recreation, restore the (possibly
+        // already consumed) pending value so an added torrent isn't offered again on rotate
+        pendingTorrentUrl = if (savedInstanceState == null) {
+            extractTorrentUrl(intent)
+        } else {
+            savedInstanceState.getString(STATE_PENDING_TORRENT_URL)
+        }
         setContent {
             TransdroidTheme {
                 val windowSizeClass = calculateWindowSizeClass(this)
@@ -56,6 +62,11 @@ class MainActivity : ComponentActivity() {
         extractTorrentUrl(intent)?.let { pendingTorrentUrl = it }
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString(STATE_PENDING_TORRENT_URL, pendingTorrentUrl)
+    }
+
     /** Pulls a magnet link, torrent URL or .torrent content URI out of VIEW/SEND intents. */
     private fun extractTorrentUrl(intent: Intent?): String? = when (intent?.action) {
         Intent.ACTION_VIEW -> intent.dataString?.takeIf {
@@ -65,5 +76,9 @@ class MainActivity : ComponentActivity() {
             it.startsWith("magnet:") || it.startsWith("http://") || it.startsWith("https://")
         }
         else -> null
+    }
+
+    private companion object {
+        const val STATE_PENDING_TORRENT_URL = "pending_torrent_url"
     }
 }

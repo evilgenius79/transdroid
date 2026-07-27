@@ -28,12 +28,12 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.float
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.floatOrNull
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.long
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
 import okhttp3.MediaType.Companion.toMediaType
@@ -71,17 +71,17 @@ class DelugeAdapter(
 
     override suspend fun testConnection(): String {
         ensureAuthenticated()
-        val version = try {
-            call("daemon.info").jsonPrimitive.contentOrNull
-        } catch (e: DaemonException.UnexpectedResponse) {
-            // daemon.info was removed in Deluge 2; fall back to the web plugin's version
-            try {
-                call("web.get_host_status").jsonArray.getOrNull(3)?.jsonPrimitive?.contentOrNull
-            } catch (e2: DaemonException) {
-                null
-            }
-        }
+        // daemon.info exists on Deluge 1.3, daemon.get_version on 2.x; either may be absent
+        val version = tryVersionCall("daemon.info") ?: tryVersionCall("daemon.get_version")
         return if (version == null) "Deluge" else "Deluge $version"
+    }
+
+    private suspend fun tryVersionCall(method: String): String? = try {
+        call(method).jsonPrimitive.contentOrNull
+    } catch (e: DaemonException.UnexpectedResponse) {
+        null
+    } catch (e: IllegalArgumentException) {
+        null
     }
 
     override suspend fun listTorrents(): List<Torrent> {
@@ -107,22 +107,25 @@ class DelugeAdapter(
             "Error" -> TorrentStatus.ERROR
             else -> TorrentStatus.UNKNOWN
         }
-        val size = obj["total_wanted"]?.jsonPrimitive?.long ?: 0L
+        // Deluge freely mixes ints and floats between versions (2.x reports even eta as a
+        // float); parse every numeric field tolerantly
+        fun long(key: String): Long = obj[key]?.jsonPrimitive?.doubleOrNull?.toLong() ?: 0L
+        fun int(key: String): Int = obj[key]?.jsonPrimitive?.doubleOrNull?.toInt() ?: 0
+
         return Torrent(
             id = hash,
             name = obj["name"]?.jsonPrimitive?.contentOrNull ?: "",
             status = status,
-            progress = ((obj["progress"]?.jsonPrimitive?.float ?: 0f) / 100f).coerceIn(0f, 1f),
-            downloadRate = obj["download_payload_rate"]?.jsonPrimitive?.long ?: 0L,
-            uploadRate = obj["upload_payload_rate"]?.jsonPrimitive?.long ?: 0L,
-            etaSeconds = obj["eta"]?.jsonPrimitive?.long?.takeIf { it > 0 },
-            sizeBytes = size,
-            downloadedBytes = obj["total_done"]?.jsonPrimitive?.long ?: 0L,
-            uploadedBytes = obj["total_uploaded"]?.jsonPrimitive?.long ?: 0L,
-            ratio = (obj["ratio"]?.jsonPrimitive?.float ?: 0f).coerceAtLeast(0f),
-            peersConnected = (obj["num_peers"]?.jsonPrimitive?.int ?: 0) +
-                (obj["num_seeds"]?.jsonPrimitive?.int ?: 0),
-            addedTimestamp = obj["time_added"]?.jsonPrimitive?.float?.toLong()?.takeIf { it > 0 },
+            progress = ((obj["progress"]?.jsonPrimitive?.floatOrNull ?: 0f) / 100f).coerceIn(0f, 1f),
+            downloadRate = long("download_payload_rate"),
+            uploadRate = long("upload_payload_rate"),
+            etaSeconds = long("eta").takeIf { it > 0 },
+            sizeBytes = long("total_wanted"),
+            downloadedBytes = long("total_done"),
+            uploadedBytes = long("total_uploaded"),
+            ratio = (obj["ratio"]?.jsonPrimitive?.floatOrNull ?: 0f).coerceAtLeast(0f),
+            peersConnected = int("num_peers") + int("num_seeds"),
+            addedTimestamp = long("time_added").takeIf { it > 0 },
             downloadDir = obj["save_path"]?.jsonPrimitive?.contentOrNull,
             error = if (status == TorrentStatus.ERROR) {
                 obj["message"]?.jsonPrimitive?.contentOrNull ?: "Torrent in error state"
@@ -175,13 +178,13 @@ class DelugeAdapter(
         val priorities = obj["file_priorities"]?.jsonArray
         return files.mapIndexed { index, element ->
             val file = element.jsonObject
-            val size = file["size"]?.jsonPrimitive?.long ?: 0L
-            val fileProgress = progress?.getOrNull(index)?.jsonPrimitive?.float ?: 0f
+            val size = file["size"]?.jsonPrimitive?.doubleOrNull?.toLong() ?: 0L
+            val fileProgress = progress?.getOrNull(index)?.jsonPrimitive?.floatOrNull ?: 0f
             TorrentFile(
                 path = file["path"]?.jsonPrimitive?.contentOrNull ?: "",
                 sizeBytes = size,
                 downloadedBytes = (size * fileProgress).toLong(),
-                priority = when (priorities?.getOrNull(index)?.jsonPrimitive?.int ?: 4) {
+                priority = when (priorities?.getOrNull(index)?.jsonPrimitive?.doubleOrNull?.toInt() ?: 4) {
                     0 -> FilePriority.OFF
                     1 -> FilePriority.LOW
                     7 -> FilePriority.HIGH

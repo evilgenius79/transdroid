@@ -23,10 +23,14 @@ import androidx.datastore.core.DataStoreFactory
 import androidx.datastore.core.Serializer
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.dataStoreFile
+import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
+import javax.crypto.AEADBadTagException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.retryWhen
 import kotlinx.serialization.json.Json
 
 /**
@@ -42,7 +46,12 @@ class ServerProfilesRepository(context: Context) {
         produceFile = { context.dataStoreFile(FILE_NAME) },
     )
 
-    val profiles: Flow<List<ServerProfile>> = dataStore.data.map { it.profiles }
+    /** The store's data, retrying briefly when the Keystore is transiently unavailable. */
+    private val data: Flow<ProfilesData> = dataStore.data.retryWhen { cause, attempt ->
+        (cause is IOException && attempt < 3).also { retrying -> if (retrying) delay(250 * (attempt + 1)) }
+    }
+
+    val profiles: Flow<List<ServerProfile>> = data.map { it.profiles }
 
     suspend fun save(profile: ServerProfile) {
         dataStore.updateData { data ->
@@ -62,7 +71,7 @@ class ServerProfilesRepository(context: Context) {
         }
     }
 
-    val feeds: Flow<List<RssFeed>> = dataStore.data.map { it.feeds }
+    val feeds: Flow<List<RssFeed>> = data.map { it.feeds }
 
     suspend fun saveFeed(feed: RssFeed) {
         dataStore.updateData { data ->
@@ -82,7 +91,18 @@ class ServerProfilesRepository(context: Context) {
         }
     }
 
-    val searchProviders: Flow<List<SearchProviderConfig>> = dataStore.data.map { it.searchProviders }
+    /** Updates a feed's last-viewed marker without resurrecting it if it was deleted. */
+    suspend fun markFeedViewed(feedId: String, timestamp: Long) {
+        dataStore.updateData { data ->
+            data.copy(
+                feeds = data.feeds.map {
+                    if (it.id == feedId) it.copy(lastViewedTimestamp = timestamp) else it
+                }
+            )
+        }
+    }
+
+    val searchProviders: Flow<List<SearchProviderConfig>> = data.map { it.searchProviders }
 
     suspend fun saveSearchProvider(provider: SearchProviderConfig) {
         dataStore.updateData { data ->
@@ -111,10 +131,23 @@ class ServerProfilesRepository(context: Context) {
         override suspend fun readFrom(input: InputStream): ProfilesData {
             val blob = input.readBytes()
             if (blob.isEmpty()) return defaultValue
-            return try {
-                json.decodeFromString(ProfileCrypto.decrypt(blob).decodeToString())
+            // Only unrecoverable data problems may become CorruptionException — the
+            // corruption handler WIPES the store. A transient Keystore failure (which
+            // Android is known to produce right after unlock or under system pressure)
+            // must surface as a retryable IOException instead, never as corruption.
+            val plaintext = try {
+                ProfileCrypto.decrypt(blob)
+            } catch (e: AEADBadTagException) {
+                throw CorruptionException("Profiles cannot be decrypted with the current key", e)
+            } catch (e: IllegalArgumentException) {
+                throw CorruptionException("Profiles blob is malformed", e)
             } catch (e: Exception) {
-                throw CorruptionException("Cannot read server profiles", e)
+                throw IOException("Keystore unavailable while reading server profiles", e)
+            }
+            return try {
+                json.decodeFromString(plaintext.decodeToString())
+            } catch (e: Exception) {
+                throw CorruptionException("Cannot parse server profiles", e)
             }
         }
 

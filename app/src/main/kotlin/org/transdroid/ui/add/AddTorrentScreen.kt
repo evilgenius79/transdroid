@@ -79,7 +79,9 @@ fun AddTorrentScreen(
     var url by rememberSaveable { mutableStateOf(if (initialIsFile) "" else initialUrl) }
     var fileUri by rememberSaveable { mutableStateOf(if (initialIsFile) initialUrl else null) }
     var invalidInput by rememberSaveable { mutableStateOf(false) }
-    var submitting by rememberSaveable { mutableStateOf(false) }
+    // Deliberately not saveable: the completion callback writes to this composition's state,
+    // so restoring `true` across recreation would leave the button disabled forever
+    var submitting by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<UiError?>(null) }
     var fileReadFailed by remember { mutableStateOf(false) }
 
@@ -208,12 +210,24 @@ fun AddTorrentScreen(
     }
 }
 
-/** Reads the picked .torrent file, returning (fileName, contents) or null on failure. */
+/**
+ * Reads the picked .torrent file, returning (fileName, contents) or null on failure. Reads
+ * at most [MAX_TORRENT_FILE_BYTES] so a mistakenly picked huge file cannot exhaust memory.
+ */
 private fun readTorrentFile(context: Context, uri: Uri): Pair<String, ByteArray>? = try {
     context.contentResolver.openInputStream(uri)?.use { stream ->
-        val contents = stream.readBytes()
-        if (contents.isEmpty() || contents.size > MAX_TORRENT_FILE_BYTES) null
-        else displayName(context, uri) to contents
+        val output = java.io.ByteArrayOutputStream()
+        val buffer = ByteArray(64 * 1024)
+        var total = 0L
+        while (true) {
+            val read = stream.read(buffer)
+            if (read < 0) break
+            total += read
+            if (total > MAX_TORRENT_FILE_BYTES) return null
+            output.write(buffer, 0, read)
+        }
+        val contents = output.toByteArray()
+        if (contents.isEmpty()) null else displayName(context, uri) to contents
     }
 } catch (e: Exception) {
     null

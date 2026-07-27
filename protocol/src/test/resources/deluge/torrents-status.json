@@ -6,7 +6,7 @@
       "progress": 42.66,
       "download_payload_rate": 1250000,
       "upload_payload_rate": 48000,
-      "eta": 1220,
+      "eta": 1220.0,
       "total_wanted": 6114656256,
       "total_done": 2608512724,
       "total_uploaded": 104857600,

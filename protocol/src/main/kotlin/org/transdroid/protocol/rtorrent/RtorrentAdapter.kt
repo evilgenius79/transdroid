@@ -41,7 +41,8 @@ class RtorrentAdapter(
     private val httpClient: OkHttpClient,
 ) : DaemonAdapter {
 
-    private val rpcUrl = config.baseUrl + (config.path?.takeIf { it.isNotBlank() } ?: "/RPC2")
+    private val rpcUrl = config.baseUrl +
+        (config.path?.takeIf { it.isNotBlank() } ?: "/RPC2").let { if (it.startsWith("/")) it else "/$it" }
 
     override suspend fun testConnection(): String {
         val version = call("system.client_version") as? String ?: "unknown"

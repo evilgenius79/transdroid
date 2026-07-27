@@ -25,6 +25,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -59,7 +60,8 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
 
     fun save(profile: ServerProfile) {
         viewModelScope.launch {
-            val firstServer = profiles.value.isEmpty()
+            // Read from the repository, not the StateFlow, which may not have emitted yet
+            val firstServer = container.profilesRepository.profiles.first().isEmpty()
             container.profilesRepository.save(profile)
             if (firstServer) container.settingsRepository.setActiveServer(profile.id)
         }
@@ -67,8 +69,9 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
 
     fun delete(profileId: String) {
         viewModelScope.launch {
+            val wasActive = container.settingsRepository.activeServerId.first() == profileId
             container.profilesRepository.delete(profileId)
-            if (activeServerId.value == profileId) container.settingsRepository.setActiveServer(null)
+            if (wasActive) container.settingsRepository.setActiveServer(null)
         }
     }
 
