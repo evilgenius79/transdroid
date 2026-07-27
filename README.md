@@ -9,6 +9,40 @@ Manage torrents from your Android device.
 > rewrite following the [Transdroid 3 plan](transdroid3_plan.md). The stable Transdroid 2
 > app lives on `master`, which is in maintenance mode (security/critical fixes only).
 
+What has been done so far
+=========================
+
+This branch replaces the entire Transdroid 2 code base (Java, Apache HTTP legacy,
+AndroidAnnotations, ORMLite, XML layouts) with a new app built from scratch. Status by
+area:
+
+* **Project foundations** — new Gradle Kotlin DSL build with a version catalog, minSdk 29
+  / targetSdk 36, the `full`/`lite` product flavor split carried over from v2, and a
+  GitHub Actions CI pipeline that runs all tests and lint on every push and uploads an
+  installable debug APK as a build artifact (see the
+  [Actions tab](../../actions), bottom of the latest run, artifact
+  `transdroid-full-debug`).
+* **Protocol layer** (plan Phase 1 + part of Phase 4) — a new pure-JVM `:protocol` module
+  defines one normalized `DaemonAdapter` interface plus torrent/file models, with working
+  adapters for **Transmission** (JSON-RPC, 409 session-id handshake, basic auth) and
+  **qBittorrent** (Web API v2 cookie auth, compatible with both 4.x `pause/resume` and
+  5.x `stop/start` endpoints). All protocol behavior is unit-tested against recorded
+  fixture responses; no emulator or real daemon needed.
+* **App UI** (plan Phase 2 + Phase 3) — Jetpack Compose with Material 3 in the classic
+  grey-green Transdroid identity: torrent list with automatic 5-second refresh, status
+  filters and pull-to-refresh; torrent details with start/pause/remove (optionally
+  deleting data) and per-file progress; add-torrent by magnet link or URL, including
+  handling magnet links opened from other apps; server settings with a connection test
+  button. On tablets/foldables the list and details show side by side.
+* **Security** — server credentials are stored AES-256-GCM encrypted using a
+  hardware-backed Android Keystore key and are excluded from cloud backup and device
+  transfer; passwords never leave the device.
+* **Verified** — protocol and app unit tests pass, Android lint is clean, and debug plus
+  minified R8 release builds succeed for both flavors.
+
+Not yet done: rTorrent and Deluge adapters, torrent search, RSS, widgets, notifications,
+and F-Droid reproducible-build/release setup. See the [roadmap](transdroid3_plan.md#roadmap).
+
 About the rewrite
 =================
 
