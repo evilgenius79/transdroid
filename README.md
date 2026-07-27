@@ -1,53 +1,59 @@
-Transdroid
-==========
+Transdroid 3
+============
 
-[www.transdroid.org](https://www.transdroid.org/)
-[Twitter](https://twitter.com/transdroid) - [transdroid@2312.nl](mailto:transdroid@2312.nl)
+[www.transdroid.org](https://www.transdroid.org/) - [transdroid@2312.nl](mailto:transdroid@2312.nl)
 
 Manage torrents from your Android device.
 
-<a href="https://transdroid.org/latest">
-    <img src="https://transdroid.org/images/getontransdroid.png"
-    alt="Get it on transdroid.org"
-    height="80">
-</a>
-<a href="https://f-droid.org/packages/org.transdroid.full/">
-    <img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png"
-    alt="Get it on F-Droid"
-    height="80">
-</a>
-<a href="https://play.google.com/store/apps/details?id=org.transdroid.lite">
-    <img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png"
-    alt="Get it on Google Play"
-    height="80">
-</a>
+> **Branch notice** — this branch contains the in-development **Transdroid 3**, a ground-up
+> rewrite following the [Transdroid 3 plan](transdroid3_plan.md). The stable Transdroid 2
+> app lives on `master`, which is in maintenance mode (security/critical fixes only).
 
-<img src="https://2312.nl/images/screenshot_transdroid_main.png" alt="Screen shot of the main torrents listing screen" width="280" />
+About the rewrite
+=================
 
+Transdroid 3 is a fresh start on the same mission: manage your torrents from your Android
+device. The rewrite replaces the legacy Apache HTTP networking, AndroidAnnotations, ORMLite
+and XML layouts of Transdroid 2 with a modern, testable stack:
 
-Manage your torrents from your Android device with Transdroid.
-All popular clients are supported: µTorrent, Transmission, rTorrent, Vuze, Deluge, BitTorrent 6, qBittorrent, and many more.
-You can view and manage running torrents and individual files.
-Adding is easy via the integrated search or RSS feeds (full version required).
-Monitor progress using the home screen widget or background alarm service.
+* **Kotlin** everywhere, with coroutines and Flow for concurrency
+* **Jetpack Compose** with Material 3, themed with the classic Transdroid grey-green identity
+* **OkHttp** + kotlinx.serialization for the daemon protocols
+* A pure-JVM **`:protocol` module** containing all client adapters, unit-tested against
+  recorded fixture responses — no Android dependency, no emulator needed
+* **Encrypted server profiles**: connection credentials are stored AES-256-GCM encrypted
+  with a hardware-backed Android Keystore key, and excluded from device backups
+* **DataStore** for preferences; no SQL database, no ORM
+* minSdk 29 (Android 10) and up, edge-to-edge, adaptive two-pane layout on large screens
+
+Supported clients
+=================
+
+| Client | Status |
+| --- | --- |
+| Transmission | ✅ Supported (RPC over JSON, session-id handshake, basic auth) |
+| qBittorrent | ✅ Supported (Web API v2, works with qBittorrent 4.1+ and 5.x) |
+| rTorrent, Deluge | Planned (see the [roadmap](transdroid3_plan.md#roadmap)) |
+
+The remaining Transdroid 2 adapters are out of scope for the initial v3 release; community
+contributions can revive them once the adapter interface stabilizes.
+
+Building
+========
+
+```
+./gradlew :protocol:test        # protocol layer unit tests (pure JVM)
+./gradlew :app:assembleFullDebug
+```
+
+Two product flavors exist, carried over from Transdroid 2: `full` (transdroid.org, F-Droid)
+and `lite` (Google Play). Feature differences are driven purely by flavor resources.
 
 Contributions
 =============
 
 Code and design contributions are very welcome.
-You might want to contact me via social networks (Twitter) or e-mail first.
 Please note that all code will be licensed in GNU GPLv3.
-
-Please respect the coding standards for easier merging.
-`master` contains the current release version of Transdroid while `dev` contains the active development version.
-However, larger and new features will be developed in their own branch.
-
-Code structure
-==============
-
-Transdroid is (since version 2.5.23) compiled against Android 14 (API level 34) and (since version 2.5.23) supporting Android 5 (API level 21) and up only.
-To support lite (Transdrone, specially for the Play Store) and full (Transdroid) versions of the app, build flavours are defined in gradle, which contain version-specific resources.
-Dependencies are managed via JCentral et al. in the app's build.gradle file.
 
 Developed By
 ============
@@ -58,7 +64,7 @@ Contributions by various others (see commit log).
 License
 =======
 
-    Copyright 2010-2024 Eric Kok et al.
+    Copyright 2010-2026 Eric Kok et al.
 
     Transdroid is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -73,46 +79,10 @@ License
     You should have received a copy of the GNU General Public License
     along with Transdroid.  If not, see <https://www.gnu.org/licenses/>.
 
-Some code/libraries/resources are used in the project:
-*  [Android Jetpack (AndroidX)](https://developer.android.com/jetpack)
-    The Android Open Source Project
-    Apache License, Version 2.0
-*  [AndroidAnnotations](http://androidannotations.org/)
-    Pierre-Yves Ricau (eBusinessInformations) et al.
-    Apache License, Version 2.0
-*  [ORMLite](https://github.com/j256/ormlite-core) and [ORMLite Android](https://github.com/j256/ormlite-android)
-    Gray Watson
-    ISC License
-*  [Android Universal Image Loader](https://github.com/nostra13/Android-Universal-Image-Loader)
-    Sergey Tarasevich
-    Apache License, Version 2.0
-*  [FloatingActionButton](https://github.com/zendesk/android-floating-action-button)
-    Oleksandr Melnykov, Zendesk
-    Apache License, Version 2.0
-*  [Snackbar](https://github.com/nispok/snackbar)
-    William Mora
-    MIT License
-*  [Java implementation of Rencode](https://github.com/aegnor/rencode-java)
-    Daniel Dimovski
-    MIT License
-*  [OpenJPA's Base16Encoder](https://github.com/apache/openjpa)
-    Marc Prud'hommeaux
-    Apache OpenJPA
-*  [Base64](http://iharder.sourceforge.net/current/java/base64/)
-    Robert Harder
-    Public Domain
-*  [aXMLRPC](https://github.com/gturri/aXMLRPC)
-    Tim Roes
-    MIT License
-*  [Material Dialogs](https://github.com/afollestad/material-dialogs)
-    Aidan Follestad
-    Apache License, Version 2.0
-*  [android-ColorPickerPreference](https://github.com/attenzione/android-ColorPickerPreference)
-    Daniel Nilsson and Sergey Margaritov
-    Apache License, Version 2.0
-*  RssParser ([learning-android](https://github.com/tanepiper/learning-android))
-    Tane Piper
-    Public Domain
-*  [Funnel icon](https://thenounproject.com/term/funnel/5608/)
-    Naomi Atkinson from The Noun Project
-    Creative Commons Attribution 3.0
+Libraries used in the project:
+*  [Android Jetpack (AndroidX)](https://developer.android.com/jetpack), including Compose —
+   The Android Open Source Project, Apache License 2.0
+*  [Kotlin and kotlinx libraries](https://kotlinlang.org/) —
+   JetBrains and contributors, Apache License 2.0
+*  [OkHttp](https://square.github.io/okhttp/) —
+   Square, Inc., Apache License 2.0

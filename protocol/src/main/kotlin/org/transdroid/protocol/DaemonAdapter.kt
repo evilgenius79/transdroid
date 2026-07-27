@@ -1,0 +1,66 @@
+/*
+ * Copyright 2010-2026 Eric Kok et al.
+ *
+ * Transdroid is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Transdroid is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Transdroid. If not, see <https://www.gnu.org/licenses/>.
+ */
+package org.transdroid.protocol
+
+import java.util.concurrent.TimeUnit
+import okhttp3.OkHttpClient
+import org.transdroid.protocol.qbittorrent.QbittorrentAdapter
+import org.transdroid.protocol.transmission.TransmissionAdapter
+
+/**
+ * A connection to one torrent daemon. Implementations are stateless beyond connection/session
+ * bookkeeping and safe to call from any dispatcher; all calls block on network I/O internally
+ * on the IO dispatcher. All methods throw [DaemonException] on failure.
+ */
+interface DaemonAdapter {
+    val config: DaemonConfig
+
+    /** Verifies connectivity and credentials, returning a daemon version description. */
+    suspend fun testConnection(): String
+
+    suspend fun listTorrents(): List<Torrent>
+
+    /** Adds a torrent by magnet link or a URL to a .torrent file. */
+    suspend fun addByUrl(url: String)
+
+    /** Adds a torrent from the raw bytes of a .torrent file. */
+    suspend fun addByFile(fileName: String, contents: ByteArray)
+
+    suspend fun start(torrentId: String)
+
+    suspend fun pause(torrentId: String)
+
+    suspend fun remove(torrentId: String, deleteData: Boolean)
+
+    suspend fun listFiles(torrentId: String): List<TorrentFile>
+}
+
+object DaemonAdapterFactory {
+
+    /** A default client with timeouts suited for home servers and seedboxes. */
+    fun defaultHttpClient(): OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
+        .build()
+
+    fun create(config: DaemonConfig, httpClient: OkHttpClient = defaultHttpClient()): DaemonAdapter =
+        when (config.type) {
+            DaemonType.TRANSMISSION -> TransmissionAdapter(config, httpClient)
+            DaemonType.QBITTORRENT -> QbittorrentAdapter(config, httpClient)
+        }
+}

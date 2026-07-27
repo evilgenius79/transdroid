@@ -1,0 +1,73 @@
+/*
+ * Copyright 2010-2026 Eric Kok et al.
+ *
+ * Transdroid is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Transdroid is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Transdroid. If not, see <https://www.gnu.org/licenses/>.
+ */
+package org.transdroid
+
+import android.app.Application
+import android.content.Context
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import org.transdroid.data.ServerProfile
+import org.transdroid.data.ServerProfilesRepository
+import org.transdroid.data.SettingsRepository
+import org.transdroid.protocol.DaemonAdapter
+import org.transdroid.protocol.DaemonAdapterFactory
+
+/** Lightweight manual dependency container; see the v3 plan's "keep DI light" decision. */
+class AppContainer(context: Context) {
+
+    val profilesRepository = ServerProfilesRepository(context)
+    val settingsRepository = SettingsRepository(context)
+
+    private val httpClient = DaemonAdapterFactory.defaultHttpClient()
+
+    private var cachedAdapter: Pair<ServerProfile, DaemonAdapter>? = null
+
+    /** The profile torrents are loaded from: the selected one, or the first configured. */
+    val activeProfile: Flow<ServerProfile?> =
+        combine(profilesRepository.profiles, settingsRepository.activeServerId) { profiles, activeId ->
+            profiles.firstOrNull { it.id == activeId } ?: profiles.firstOrNull()
+        }
+
+    /** Returns a (cached) adapter for [profile]; adapters keep session state like auth cookies. */
+    @Synchronized
+    fun adapterFor(profile: ServerProfile): DaemonAdapter {
+        cachedAdapter?.let { (cachedProfile, adapter) ->
+            if (cachedProfile == profile) return adapter
+        }
+        val adapter = DaemonAdapterFactory.create(profile.toDaemonConfig(), httpClient)
+        cachedAdapter = profile to adapter
+        return adapter
+    }
+
+    /** An uncached adapter for testing yet-unsaved connection settings. */
+    fun adapterForTest(profile: ServerProfile): DaemonAdapter =
+        DaemonAdapterFactory.create(profile.toDaemonConfig(), httpClient)
+}
+
+class TransdroidApplication : Application() {
+
+    lateinit var container: AppContainer
+        private set
+
+    override fun onCreate() {
+        super.onCreate()
+        container = AppContainer(this)
+    }
+}
+
+val Context.appContainer: AppContainer
+    get() = (applicationContext as TransdroidApplication).container

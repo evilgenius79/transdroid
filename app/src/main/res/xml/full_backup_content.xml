@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pre-Android 12 equivalent of data_extraction_rules.xml -->
+<full-backup-content>
+    <exclude domain="file" path="datastore/server_profiles.bin" />
+</full-backup-content>

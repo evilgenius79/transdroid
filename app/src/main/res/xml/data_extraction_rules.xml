@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Server profiles hold credentials encrypted with a device-bound Keystore key; the key does
+     not survive backup/transfer, so the blob is useless elsewhere and must not leave the device. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="file" path="datastore/server_profiles.bin" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="file" path="datastore/server_profiles.bin" />
+    </device-transfer>
+</data-extraction-rules>

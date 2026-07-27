@@ -1,0 +1,19 @@
+{
+  "arguments": {
+    "torrents": [
+      {
+        "files": [
+          { "name": "linux-distro/disc1.iso", "length": 4700000000, "bytesCompleted": 4700000000 },
+          { "name": "linux-distro/disc2.iso", "length": 4700000000, "bytesCompleted": 1175000000 },
+          { "name": "linux-distro/README.txt", "length": 2048, "bytesCompleted": 0 }
+        ],
+        "fileStats": [
+          { "bytesCompleted": 4700000000, "wanted": true, "priority": 1 },
+          { "bytesCompleted": 1175000000, "wanted": true, "priority": 0 },
+          { "bytesCompleted": 0, "wanted": false, "priority": -1 }
+        ]
+      }
+    ]
+  },
+  "result": "success"
+}

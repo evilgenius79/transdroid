@@ -1,0 +1,75 @@
+{
+  "arguments": {
+    "torrents": [
+      {
+        "id": 1,
+        "name": "ubuntu-24.04.2-desktop-amd64.iso",
+        "status": 4,
+        "percentDone": 0.4266,
+        "rateDownload": 1250000,
+        "rateUpload": 48000,
+        "eta": 1220,
+        "totalSize": 6114656256,
+        "downloadedEver": 2608512724,
+        "uploadedEver": 104857600,
+        "uploadRatio": 0.0402,
+        "peersConnected": 34,
+        "addedDate": 1753526401,
+        "downloadDir": "/downloads/complete",
+        "errorString": ""
+      },
+      {
+        "id": 2,
+        "name": "debian-12.7.0-amd64-netinst.iso",
+        "status": 6,
+        "percentDone": 1,
+        "rateDownload": 0,
+        "rateUpload": 356000,
+        "eta": -1,
+        "totalSize": 661651456,
+        "downloadedEver": 661651456,
+        "uploadedEver": 1323302912,
+        "uploadRatio": 2.0,
+        "peersConnected": 6,
+        "addedDate": 1753440001,
+        "downloadDir": "/downloads/complete",
+        "errorString": ""
+      },
+      {
+        "id": 3,
+        "name": "archlinux-2025.07.01-x86_64.iso",
+        "status": 0,
+        "percentDone": 0.12,
+        "rateDownload": 0,
+        "rateUpload": 0,
+        "eta": -2,
+        "totalSize": 1189085184,
+        "downloadedEver": 142690222,
+        "uploadedEver": 0,
+        "uploadRatio": -1,
+        "peersConnected": 0,
+        "addedDate": 1753353601,
+        "downloadDir": "/downloads/incomplete",
+        "errorString": ""
+      },
+      {
+        "id": 4,
+        "name": "unregistered.torrent",
+        "status": 0,
+        "percentDone": 0.5,
+        "rateDownload": 0,
+        "rateUpload": 0,
+        "eta": -1,
+        "totalSize": 104857600,
+        "downloadedEver": 52428800,
+        "uploadedEver": 0,
+        "uploadRatio": 0,
+        "peersConnected": 0,
+        "addedDate": 1753267201,
+        "downloadDir": "/downloads/incomplete",
+        "errorString": "Unregistered torrent"
+      }
+    ]
+  },
+  "result": "success"
+}
