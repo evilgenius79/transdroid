@@ -16,6 +16,7 @@
  */
 package org.transdroid.protocol.rtorrent
 
+import java.net.URLDecoder
 import okhttp3.Credentials
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -56,6 +57,7 @@ class RtorrentAdapter(
             "d.hash=", "d.name=", "d.state=", "d.complete=", "d.is_active=", "d.hashing=",
             "d.down.rate=", "d.up.rate=", "d.size_bytes=", "d.completed_bytes=", "d.up.total=",
             "d.ratio=", "d.peers_connected=", "d.timestamp.started=", "d.directory=", "d.message=",
+            "d.custom1=",
         ) as? List<*> ?: throw DaemonException.UnexpectedResponse("Unexpected d.multicall2 reply")
         return rows.map { row ->
             val fields = row as? List<*> ?: throw DaemonException.UnexpectedResponse("Bad multicall row")
@@ -105,6 +107,16 @@ class RtorrentAdapter(
             addedTimestamp = num(13).takeIf { it > 0 },
             downloadDir = str(14).takeIf { it.isNotBlank() },
             error = message,
+            // ruTorrent stores its label URL-encoded in custom1
+            labels = str(16).takeIf { it.isNotBlank() }?.let {
+                listOf(
+                    try {
+                        URLDecoder.decode(it, "UTF-8")
+                    } catch (e: IllegalArgumentException) {
+                        it
+                    }
+                )
+            } ?: emptyList(),
         )
     }
 
@@ -139,12 +151,13 @@ class RtorrentAdapter(
             torrentId, "",
             "f.path=", "f.size_bytes=", "f.completed_chunks=", "f.size_chunks=", "f.priority=",
         ) as? List<*> ?: throw DaemonException.UnexpectedResponse("Unexpected f.multicall reply")
-        return rows.map { row ->
+        return rows.mapIndexed { index, row ->
             val fields = row as? List<*> ?: throw DaemonException.UnexpectedResponse("Bad multicall row")
             val size = (fields.getOrNull(1) as? Long) ?: 0L
             val completedChunks = (fields.getOrNull(2) as? Long) ?: 0L
             val sizeChunks = (fields.getOrNull(3) as? Long) ?: 0L
             TorrentFile(
+                index = index,
                 path = fields.getOrNull(0)?.toString().orEmpty(),
                 sizeBytes = size,
                 downloadedBytes = if (sizeChunks <= 0) 0L else size * completedChunks / sizeChunks,
@@ -155,6 +168,17 @@ class RtorrentAdapter(
                 },
             )
         }
+    }
+
+    override suspend fun setFilePriority(torrentId: String, fileIndex: Int, priority: FilePriority) {
+        // rTorrent priorities: 0 = off, 1 = normal (LOW folds into it), 2 = high
+        val value = when (priority) {
+            FilePriority.OFF -> 0L
+            FilePriority.HIGH -> 2L
+            else -> 1L
+        }
+        call("f.priority.set", "$torrentId:f$fileIndex", value)
+        call("d.update_priorities", torrentId)
     }
 
     private suspend fun call(method: String, vararg params: Any?): Any? {

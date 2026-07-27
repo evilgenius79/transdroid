@@ -25,10 +25,19 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 /**
- * AES-256-GCM encryption for the server profiles store, keyed by a non-exportable key in the
- * Android Keystore. Blob layout: [1 byte IV length][IV][ciphertext+tag].
+ * Encrypts/decrypts the profiles store. Abstracted so the serializer's corruption/transient
+ * error semantics are unit-testable without an Android Keystore.
  */
-internal object ProfileCrypto {
+interface ProfilesCipher {
+    fun encrypt(plaintext: ByteArray): ByteArray
+    fun decrypt(blob: ByteArray): ByteArray
+}
+
+/**
+ * AES-256-GCM keyed by a non-exportable key in the Android Keystore.
+ * Blob layout: [1 byte IV length][IV][ciphertext+tag].
+ */
+internal object KeystoreProfilesCipher : ProfilesCipher {
 
     private const val KEY_ALIAS = "transdroid_server_profiles"
     private const val TRANSFORMATION = "AES/GCM/NoPadding"
@@ -48,7 +57,7 @@ internal object ProfileCrypto {
         return generator.generateKey()
     }
 
-    fun encrypt(plaintext: ByteArray): ByteArray {
+    override fun encrypt(plaintext: ByteArray): ByteArray {
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, key())
         val iv = cipher.iv
@@ -60,7 +69,7 @@ internal object ProfileCrypto {
         }
     }
 
-    fun decrypt(blob: ByteArray): ByteArray {
+    override fun decrypt(blob: ByteArray): ByteArray {
         require(blob.size > 1) { "Encrypted blob too short" }
         val ivLength = blob[0].toInt()
         require(ivLength in 12..16 && blob.size > 1 + ivLength) { "Corrupt encrypted blob" }

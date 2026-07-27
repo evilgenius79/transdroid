@@ -28,6 +28,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -35,6 +36,7 @@ import org.transdroid.AppContainer
 import org.transdroid.appContainer
 import org.transdroid.data.ServerProfile
 import org.transdroid.protocol.DaemonException
+import org.transdroid.protocol.FilePriority
 import org.transdroid.protocol.Torrent
 import org.transdroid.protocol.TorrentFile
 import org.transdroid.protocol.TorrentStatus
@@ -43,12 +45,14 @@ import org.transdroid.protocol.TorrentStatus
 sealed class UiError {
     data class Connection(val host: String) : UiError()
     data object Authentication : UiError()
+    data object Ssl : UiError()
     data object Unexpected : UiError()
 }
 
 internal fun Throwable.toUiError(host: String): UiError = when (this) {
     is DaemonException.Connection -> UiError.Connection(host)
     is DaemonException.Authentication -> UiError.Authentication
+    is DaemonException.UntrustedServer -> UiError.Ssl
     else -> UiError.Unexpected
 }
 
@@ -86,12 +90,18 @@ data class TorrentsUiState(
     val refreshing: Boolean = false,
     val error: UiError? = null,
     val filter: TorrentFilter = TorrentFilter.ALL,
+    val labelFilter: String? = null,
     val sort: TorrentSort = TorrentSort.DATE_ADDED,
     val selectedTorrentId: String? = null,
     val files: Map<String, List<TorrentFile>> = emptyMap(),
 ) {
+    val availableLabels: List<String>
+        get() = torrents.flatMap { it.labels }.distinct().sorted()
+
     val visibleTorrents: List<Torrent>
-        get() = torrents.filter(filter::matches).sortedWith(sort.comparator().thenBy { it.name.lowercase() })
+        get() = torrents
+            .filter { filter.matches(it) && (labelFilter == null || labelFilter in it.labels) }
+            .sortedWith(sort.comparator().thenBy { it.name.lowercase() })
 
     val selectedTorrent: Torrent?
         get() = torrents.firstOrNull { it.id == selectedTorrentId }
@@ -125,7 +135,7 @@ class TorrentsViewModel(private val container: AppContainer) : ViewModel() {
     suspend fun pollLoop() {
         while (currentCoroutineContext().isActive) {
             refreshNow(showSpinner = false)
-            delay(POLL_INTERVAL_MS)
+            delay(container.settingsRepository.pollIntervalSeconds.first() * 1000L)
         }
     }
 
@@ -156,6 +166,26 @@ class TorrentsViewModel(private val container: AppContainer) : ViewModel() {
 
     fun setSort(sort: TorrentSort) {
         _ui.update { it.copy(sort = sort) }
+    }
+
+    fun setLabelFilter(label: String?) {
+        _ui.update { it.copy(labelFilter = if (it.labelFilter == label) null else label) }
+    }
+
+    fun setFilePriority(torrentId: String, file: TorrentFile, priority: FilePriority) {
+        val profile = _ui.value.activeProfile ?: return
+        viewModelScope.launch {
+            try {
+                val adapter = container.adapterFor(profile)
+                adapter.setFilePriority(torrentId, file.index, priority)
+                val files = adapter.listFiles(torrentId)
+                _ui.update { it.copy(files = it.files + (torrentId to files)) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _ui.update { it.copy(error = e.toUiError(profile.host)) }
+            }
+        }
     }
 
     fun select(torrentId: String?) {
@@ -233,8 +263,6 @@ class TorrentsViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     companion object {
-        private const val POLL_INTERVAL_MS = 5_000L
-
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer { TorrentsViewModel(checkNotNull(this[APPLICATION_KEY]).appContainer) }
         }

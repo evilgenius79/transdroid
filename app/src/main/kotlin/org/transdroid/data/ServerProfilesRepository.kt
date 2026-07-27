@@ -35,13 +35,13 @@ import kotlinx.serialization.json.Json
 
 /**
  * Stores server profiles as one JSON document, encrypted at rest with a Keystore-bound
- * AES-GCM key (see [ProfileCrypto]) via a custom DataStore [Serializer]. The store file is
- * excluded from auto-backup because the key never leaves this device.
+ * AES-GCM key (see [KeystoreProfilesCipher]) via a custom DataStore [Serializer]. The store
+ * file is excluded from auto-backup because the key never leaves this device.
  */
-class ServerProfilesRepository(context: Context) {
+class ServerProfilesRepository(context: Context, cipher: ProfilesCipher = KeystoreProfilesCipher) {
 
     private val dataStore: DataStore<ProfilesData> = DataStoreFactory.create(
-        serializer = EncryptedProfilesSerializer,
+        serializer = EncryptedProfilesSerializer(cipher),
         corruptionHandler = ReplaceFileCorruptionHandler { ProfilesData() },
         produceFile = { context.dataStoreFile(FILE_NAME) },
     )
@@ -122,42 +122,42 @@ class ServerProfilesRepository(context: Context) {
         }
     }
 
-    private object EncryptedProfilesSerializer : Serializer<ProfilesData> {
-
-        private val json = Json { ignoreUnknownKeys = true }
-
-        override val defaultValue = ProfilesData()
-
-        override suspend fun readFrom(input: InputStream): ProfilesData {
-            val blob = input.readBytes()
-            if (blob.isEmpty()) return defaultValue
-            // Only unrecoverable data problems may become CorruptionException — the
-            // corruption handler WIPES the store. A transient Keystore failure (which
-            // Android is known to produce right after unlock or under system pressure)
-            // must surface as a retryable IOException instead, never as corruption.
-            val plaintext = try {
-                ProfileCrypto.decrypt(blob)
-            } catch (e: AEADBadTagException) {
-                throw CorruptionException("Profiles cannot be decrypted with the current key", e)
-            } catch (e: IllegalArgumentException) {
-                throw CorruptionException("Profiles blob is malformed", e)
-            } catch (e: Exception) {
-                throw IOException("Keystore unavailable while reading server profiles", e)
-            }
-            return try {
-                json.decodeFromString(plaintext.decodeToString())
-            } catch (e: Exception) {
-                throw CorruptionException("Cannot parse server profiles", e)
-            }
-        }
-
-        override suspend fun writeTo(t: ProfilesData, output: OutputStream) {
-            output.write(ProfileCrypto.encrypt(json.encodeToString(ProfilesData.serializer(), t).encodeToByteArray()))
-        }
-    }
-
     private companion object {
         // Referenced in data_extraction_rules.xml / full_backup_content.xml
         const val FILE_NAME = "server_profiles.bin"
+    }
+}
+
+internal class EncryptedProfilesSerializer(private val cipher: ProfilesCipher) : Serializer<ProfilesData> {
+
+    private val json = Json { ignoreUnknownKeys = true }
+
+    override val defaultValue = ProfilesData()
+
+    override suspend fun readFrom(input: InputStream): ProfilesData {
+        val blob = input.readBytes()
+        if (blob.isEmpty()) return defaultValue
+        // Only unrecoverable data problems may become CorruptionException — the
+        // corruption handler WIPES the store. A transient Keystore failure (which
+        // Android is known to produce right after unlock or under system pressure)
+        // must surface as a retryable IOException instead, never as corruption.
+        val plaintext = try {
+            cipher.decrypt(blob)
+        } catch (e: AEADBadTagException) {
+            throw CorruptionException("Profiles cannot be decrypted with the current key", e)
+        } catch (e: IllegalArgumentException) {
+            throw CorruptionException("Profiles blob is malformed", e)
+        } catch (e: Exception) {
+            throw IOException("Keystore unavailable while reading server profiles", e)
+        }
+        return try {
+            json.decodeFromString(plaintext.decodeToString())
+        } catch (e: Exception) {
+            throw CorruptionException("Cannot parse server profiles", e)
+        }
+    }
+
+    override suspend fun writeTo(t: ProfilesData, output: OutputStream) {
+        output.write(cipher.encrypt(json.encodeToString(ProfilesData.serializer(), t).encodeToByteArray()))
     }
 }

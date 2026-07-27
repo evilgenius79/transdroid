@@ -1,0 +1,6 @@
+First public alpha of Transdroid 3, rewritten from scratch:
+* Transmission, qBittorrent, rTorrent and Deluge support
+* Encrypted credential storage, self-signed HTTPS via certificate pinning
+* Automatic discovery of clients on your local network
+* RSS feeds, Torznab search, notifications, home screen widget
+* Labels, file priorities, adaptive tablet layout

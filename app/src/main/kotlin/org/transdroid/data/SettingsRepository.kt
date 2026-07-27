@@ -19,6 +19,7 @@ package org.transdroid.data
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -32,6 +33,7 @@ class SettingsRepository(private val context: Context) {
 
     private val activeServerKey = stringPreferencesKey("active_server_id")
     private val notifyFinishedKey = booleanPreferencesKey("notify_finished")
+    private val pollIntervalKey = intPreferencesKey("poll_interval_seconds")
 
     val activeServerId: Flow<String?> = context.settingsDataStore.data.map { it[activeServerKey] }
 
@@ -39,6 +41,14 @@ class SettingsRepository(private val context: Context) {
         context.settingsDataStore.edit { settings ->
             if (profileId == null) settings.remove(activeServerKey) else settings[activeServerKey] = profileId
         }
+    }
+
+    /** How often the torrents list refreshes while on screen, in seconds. */
+    val pollIntervalSeconds: Flow<Int> =
+        context.settingsDataStore.data.map { it[pollIntervalKey] ?: DEFAULT_POLL_INTERVAL_SECONDS }
+
+    suspend fun setPollIntervalSeconds(seconds: Int) {
+        context.settingsDataStore.edit { it[pollIntervalKey] = seconds.coerceIn(POLL_INTERVAL_OPTIONS.first(), POLL_INTERVAL_OPTIONS.last()) }
     }
 
     /** Whether the background finished-torrent check and its notifications are enabled. */
@@ -57,4 +67,9 @@ class SettingsRepository(private val context: Context) {
     }
 
     private fun unfinishedKey(profileId: String) = stringSetPreferencesKey("unfinished_ids_$profileId")
+
+    companion object {
+        const val DEFAULT_POLL_INTERVAL_SECONDS = 5
+        val POLL_INTERVAL_OPTIONS = listOf(3, 5, 10, 30, 60)
+    }
 }

@@ -1,0 +1,22 @@
+Manage the torrents on your home server or seedbox from your Android device.
+
+Transdroid connects to the torrent client you already run:
+
+* Transmission
+* qBittorrent (4.1+ and 5.x)
+* rTorrent (including ruTorrent seedboxes)
+* Deluge (1.3 and 2.x)
+
+Features:
+
+* View, filter, sort and manage running torrents; start, pause and remove them
+* Per-file progress and download priorities
+* Add torrents via magnet links, .torrent files, URLs, RSS feeds or Torznab search (Jackett/Prowlarr)
+* Labels/categories from your client, shown as filters
+* Optional notifications when torrents finish, and a home screen widget
+* Automatic discovery of torrent clients on your local network
+* Adaptive layout for phones, foldables and tablets
+
+Your server credentials are stored encrypted with a hardware-backed key and never leave your device. Self-signed HTTPS servers are supported by pinning their certificate.
+
+Transdroid is free software, licensed under the GNU GPL v3.

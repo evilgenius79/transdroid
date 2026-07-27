@@ -35,6 +35,8 @@ data class ServerProfile(
     val path: String = "",
     val username: String = "",
     val password: String = "",
+    /** SHA-256 (lowercase hex) of an explicitly trusted self-signed certificate, or empty. */
+    val pinnedCertSha256: String = "",
     val extras: Map<String, String> = emptyMap(),
 ) {
     val displayName: String
@@ -48,6 +50,7 @@ data class ServerProfile(
         path = path.takeIf { it.isNotBlank() },
         username = username.takeIf { it.isNotBlank() },
         password = password.takeIf { it.isNotBlank() },
+        pinnedCertSha256 = pinnedCertSha256.takeIf { it.isNotBlank() },
     )
 }
 

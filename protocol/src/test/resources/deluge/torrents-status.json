@@ -15,7 +15,8 @@
       "num_seeds": 22,
       "time_added": 1753526401.0,
       "save_path": "/downloads/complete",
-      "message": "OK"
+      "message": "OK",
+      "label": "linux-isos"
     },
     "2aa4f5a7e209e54b32803d43670971c4c8caaa05": {
       "name": "debian-12.7.0-amd64-netinst.iso",

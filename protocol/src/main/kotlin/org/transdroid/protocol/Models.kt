@@ -40,6 +40,11 @@ data class DaemonConfig(
     val path: String? = null,
     val username: String? = null,
     val password: String? = null,
+    /**
+     * Lowercase hex SHA-256 of a self-signed certificate the user explicitly trusts for
+     * this server, or null to use normal CA validation only.
+     */
+    val pinnedCertSha256: String? = null,
 ) {
     val baseUrl: String
         get() = (if (useSsl) "https" else "http") + "://" + host + ":" + port
@@ -83,6 +88,8 @@ data class Torrent(
     val downloadDir: String? = null,
     /** Human-readable error reported by the daemon, or null when none. */
     val error: String? = null,
+    /** Labels/categories assigned on the daemon (qBittorrent's single category included). */
+    val labels: List<String> = emptyList(),
 ) {
     val isFinished: Boolean
         get() = progress >= 1f
@@ -92,6 +99,8 @@ enum class FilePriority { OFF, LOW, NORMAL, HIGH }
 
 /** One file inside a torrent. */
 data class TorrentFile(
+    /** Zero-based position in the daemon's file list; used to address priority changes. */
+    val index: Int,
     val path: String,
     val sizeBytes: Long,
     val downloadedBytes: Long,
@@ -111,4 +120,7 @@ sealed class DaemonException(message: String, cause: Throwable? = null) : Except
 
     /** The daemon answered, but not in a way we understand. */
     class UnexpectedResponse(message: String, cause: Throwable? = null) : DaemonException(message, cause)
+
+    /** TLS failed because the server's certificate is not trusted (e.g. self-signed). */
+    class UntrustedServer(message: String, cause: Throwable? = null) : DaemonException(message, cause)
 }

@@ -49,6 +49,12 @@ interface DaemonAdapter {
     suspend fun remove(torrentId: String, deleteData: Boolean)
 
     suspend fun listFiles(torrentId: String): List<TorrentFile>
+
+    /**
+     * Changes one file's download priority. Clients without a LOW level treat LOW as
+     * NORMAL; OFF always means "do not download".
+     */
+    suspend fun setFilePriority(torrentId: String, fileIndex: Int, priority: FilePriority)
 }
 
 object DaemonAdapterFactory {
@@ -60,11 +66,16 @@ object DaemonAdapterFactory {
         .writeTimeout(30, TimeUnit.SECONDS)
         .build()
 
-    fun create(config: DaemonConfig, httpClient: OkHttpClient = defaultHttpClient()): DaemonAdapter =
-        when (config.type) {
-            DaemonType.TRANSMISSION -> TransmissionAdapter(config, httpClient)
-            DaemonType.QBITTORRENT -> QbittorrentAdapter(config, httpClient)
-            DaemonType.RTORRENT -> RtorrentAdapter(config, httpClient)
-            DaemonType.DELUGE -> DelugeAdapter(config, httpClient)
+    fun create(config: DaemonConfig, httpClient: OkHttpClient = defaultHttpClient()): DaemonAdapter {
+        val client = config.pinnedCertSha256
+            ?.takeIf { it.isNotBlank() }
+            ?.let { Tls.clientWithPinnedCertificate(httpClient, it) }
+            ?: httpClient
+        return when (config.type) {
+            DaemonType.TRANSMISSION -> TransmissionAdapter(config, client)
+            DaemonType.QBITTORRENT -> QbittorrentAdapter(config, client)
+            DaemonType.RTORRENT -> RtorrentAdapter(config, client)
+            DaemonType.DELUGE -> DelugeAdapter(config, client)
         }
+    }
 }

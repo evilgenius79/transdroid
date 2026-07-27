@@ -105,6 +105,7 @@ class QbittorrentAdapterTest {
         assertEquals(TorrentStatus.DOWNLOADING, downloading.status)
         assertEquals(1220L, downloading.etaSeconds)
         assertEquals("seeds and leeches sum to connected peers", 34, downloading.peersConnected)
+        assertEquals("category maps to a label", listOf("linux"), downloading.labels)
 
         val seeding = torrents[1]
         assertEquals(TorrentStatus.SEEDING, seeding.status)

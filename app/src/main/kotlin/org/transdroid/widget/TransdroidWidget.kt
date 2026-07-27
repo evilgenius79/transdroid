@@ -43,6 +43,7 @@ import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import org.transdroid.MainActivity
+import org.transdroid.R
 import org.transdroid.appContainer
 import org.transdroid.util.formatSpeed
 
@@ -51,15 +52,21 @@ class TransdroidWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val state = context.appContainer.widgetStateRepository.current()
+        val strings = WidgetStrings(
+            appName = context.getString(R.string.app_name),
+            noData = context.getString(R.string.widget_no_data),
+        )
         provideContent {
             GlanceTheme {
-                WidgetContent(state)
+                WidgetContent(state, strings)
             }
         }
     }
 
+    private data class WidgetStrings(val appName: String, val noData: String)
+
     @Composable
-    private fun WidgetContent(state: WidgetState) {
+    private fun WidgetContent(state: WidgetState, strings: WidgetStrings) {
         Column(
             modifier = GlanceModifier
                 .fillMaxSize()
@@ -70,7 +77,7 @@ class TransdroidWidget : GlanceAppWidget() {
                 .clickable(actionStartActivity<MainActivity>()),
         ) {
             Text(
-                text = state.serverName ?: LocalizedStrings.appName,
+                text = state.serverName ?: strings.appName,
                 style = TextStyle(
                     color = GlanceTheme.colors.primary,
                     fontWeight = FontWeight.Bold,
@@ -80,7 +87,7 @@ class TransdroidWidget : GlanceAppWidget() {
             Spacer(GlanceModifier.height(6.dp))
             if (state.updatedAtMillis == null) {
                 Text(
-                    text = LocalizedStrings.noData,
+                    text = strings.noData,
                     style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = 13.sp),
                 )
             } else {
@@ -107,11 +114,6 @@ class TransdroidWidget : GlanceAppWidget() {
         )
     }
 
-    /** Glance runs outside the normal resource composition; fall back to plain strings. */
-    private object LocalizedStrings {
-        const val appName = "Transdroid"
-        const val noData = "Open the app to load torrents"
-    }
 }
 
 class TransdroidWidgetReceiver : GlanceAppWidgetReceiver() {

@@ -132,6 +132,9 @@ class DelugeAdapter(
             } else {
                 null
             },
+            // Present only when Deluge's Label plugin is enabled
+            labels = obj["label"]?.jsonPrimitive?.contentOrNull
+                ?.takeIf { it.isNotBlank() }?.let { listOf(it) } ?: emptyList(),
         )
     }
 
@@ -176,11 +179,13 @@ class DelugeAdapter(
         val files = obj["files"]?.jsonArray ?: return emptyList()
         val progress = obj["file_progress"]?.jsonArray
         val priorities = obj["file_priorities"]?.jsonArray
-        return files.mapIndexed { index, element ->
+        return files.mapIndexed { listIndex, element ->
             val file = element.jsonObject
             val size = file["size"]?.jsonPrimitive?.doubleOrNull?.toLong() ?: 0L
-            val fileProgress = progress?.getOrNull(index)?.jsonPrimitive?.floatOrNull ?: 0f
+            val index = file["index"]?.jsonPrimitive?.doubleOrNull?.toInt() ?: listIndex
+            val fileProgress = progress?.getOrNull(listIndex)?.jsonPrimitive?.floatOrNull ?: 0f
             TorrentFile(
+                index = index,
                 path = file["path"]?.jsonPrimitive?.contentOrNull ?: "",
                 sizeBytes = size,
                 downloadedBytes = (size * fileProgress).toLong(),
@@ -192,6 +197,34 @@ class DelugeAdapter(
                 },
             )
         }
+    }
+
+    override suspend fun setFilePriority(torrentId: String, fileIndex: Int, priority: FilePriority) {
+        ensureAuthenticated()
+        // Deluge wants the complete priorities array; read-modify-write it
+        val status = call(
+            "core.get_torrent_status",
+            torrentId,
+            buildJsonArray { add("file_priorities") },
+        ) as? JsonObject ?: throw DaemonException.UnexpectedResponse("Unexpected file_priorities reply")
+        val current = status["file_priorities"]?.jsonArray
+            ?.map { it.jsonPrimitive.doubleOrNull?.toInt() ?: 4 }
+            ?: throw DaemonException.UnexpectedResponse("Deluge did not report file priorities")
+        if (fileIndex !in current.indices) {
+            throw DaemonException.UnexpectedResponse("File index $fileIndex out of range")
+        }
+        val value = when (priority) {
+            FilePriority.OFF -> 0
+            FilePriority.LOW -> 1
+            FilePriority.HIGH -> 7
+            else -> 4
+        }
+        val updated = current.toMutableList().also { it[fileIndex] = value }
+        call(
+            "core.set_torrent_options",
+            buildJsonArray { add(torrentId) },
+            buildJsonObject { put("file_priorities", buildJsonArray { updated.forEach { add(it) } }) },
+        )
     }
 
     private suspend fun ensureAuthenticated() {
@@ -274,7 +307,7 @@ class DelugeAdapter(
         val TORRENT_KEYS = listOf(
             "name", "state", "progress", "download_payload_rate", "upload_payload_rate", "eta",
             "total_wanted", "total_done", "total_uploaded", "ratio", "num_peers", "num_seeds",
-            "time_added", "save_path", "message",
+            "time_added", "save_path", "message", "label",
         )
     }
 }

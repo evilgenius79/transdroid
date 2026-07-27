@@ -57,15 +57,25 @@ area:
 * **More ways to add** — open or share magnet links, open `.torrent` files from file
   managers and browsers, pick a `.torrent` file in-app, or paste a URL. Plus torrent
   list sorting (date added, name, download speed, ratio).
+* **Self-signed HTTPS** — seedboxes and home servers with self-signed certificates are
+  supported securely: the app shows the server's certificate fingerprint and, once
+  accepted, pins exactly that certificate for that server (no "trust everything" toggle).
+* **Local network discovery** — adding a server automatically scans your Wi-Fi/Ethernet
+  subnet for Transmission, qBittorrent and Deluge daemons and offers what it finds with
+  one tap to fill in the connection details.
+* **Labels and file priorities** — labels/categories from all four clients appear as
+  filter chips and in the details view, and per-file download priorities can be changed
+  by tapping a file.
 * **Release pipeline** — tag-triggered GitHub Releases with signed APKs (signing via
   repository secrets, unsigned fallback), `dependenciesInfo` and VCS metadata stripped
-  from APKs per F-Droid reproducible-build requirements.
+  from APKs per F-Droid reproducible-build requirements, plus fastlane store metadata.
 * **Contributor docs** (plan Phase 6) — [CONTRIBUTING.md](CONTRIBUTING.md) documents the
   build, the module layout and the adapter interface as the extension point for adding
   more torrent clients.
 
-Not yet done: F-Droid store metadata/inclusion, translations, and the remaining
-Transdroid 2 client adapters. See the [roadmap](transdroid3_plan.md#roadmap).
+Not yet done: F-Droid inclusion (metadata is ready; store screenshots and the fdroiddata
+merge request remain), translations, and the remaining Transdroid 2 client adapters. See
+the [roadmap](transdroid3_plan.md#roadmap).
 
 About the rewrite
 =================

@@ -94,6 +94,7 @@ class RtorrentAdapterTest {
         assertEquals("eta computed from remaining bytes and rate", 2804L, downloading.etaSeconds)
         assertEquals("per-mille ratio normalized", 0.04f, downloading.ratio, 0.001f)
         assertEquals(34, downloading.peersConnected)
+        assertEquals("urlencoded ruTorrent label decoded", listOf("Linux ISOs"), downloading.labels)
 
         val seeding = torrents[1]
         assertEquals(TorrentStatus.SEEDING, seeding.status)

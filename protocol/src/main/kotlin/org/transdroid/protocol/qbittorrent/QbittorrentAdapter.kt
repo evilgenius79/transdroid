@@ -104,8 +104,10 @@ class QbittorrentAdapter(
         } catch (e: Exception) {
             throw DaemonException.UnexpectedResponse("Cannot parse qBittorrent file list", e)
         }
-        return files.map { file ->
+        return files.mapIndexed { listIndex, file ->
             TorrentFile(
+                // Newer qBittorrent reports the real file index; fall back to list position
+                index = file.index ?: listIndex,
                 path = file.name,
                 sizeBytes = file.size,
                 downloadedBytes = (file.progress * file.size).toLong(),
@@ -116,6 +118,21 @@ class QbittorrentAdapter(
                 },
             )
         }
+    }
+
+    override suspend fun setFilePriority(torrentId: String, fileIndex: Int, priority: FilePriority) {
+        // qBittorrent has no LOW level: 0 = skip, 1 = normal, 6 = high
+        val value = when (priority) {
+            FilePriority.OFF -> 0
+            FilePriority.HIGH -> 6
+            else -> 1
+        }
+        val form = FormBody.Builder()
+            .add("hash", torrentId)
+            .add("id", fileIndex.toString())
+            .add("priority", value.toString())
+            .build()
+        post("api/v2/torrents/filePrio", form).use { it.readBodyOrThrow() }
     }
 
     /** qBittorrent 5 renamed pause/resume to stop/start; try new name first, fall back on 404. */
@@ -217,6 +234,7 @@ class QbittorrentAdapter(
         val num_leechs: Int = 0,
         val added_on: Long = 0,
         val save_path: String? = null,
+        val category: String = "",
     ) {
         fun toTorrent() = Torrent(
             id = hash,
@@ -242,6 +260,7 @@ class QbittorrentAdapter(
             addedTimestamp = added_on.takeIf { it > 0 },
             downloadDir = save_path,
             error = if (state == "error" || state == "missingFiles") "Torrent in error state ($state)" else null,
+            labels = listOf(category).filter { it.isNotBlank() },
         )
     }
 
@@ -251,6 +270,7 @@ class QbittorrentAdapter(
         val size: Long = 0,
         val progress: Float = 0f,
         val priority: Int = 1,
+        val index: Int? = null,
     )
 
     private companion object {

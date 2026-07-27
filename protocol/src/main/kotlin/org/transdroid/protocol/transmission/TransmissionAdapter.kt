@@ -123,11 +123,30 @@ class TransmissionAdapter(
                 }
             }
             TorrentFile(
+                index = index,
                 path = file["name"]?.jsonPrimitive?.contentOrNull ?: "",
                 sizeBytes = file["length"]?.jsonPrimitive?.long ?: 0L,
                 downloadedBytes = file["bytesCompleted"]?.jsonPrimitive?.long ?: 0L,
                 priority = priority,
             )
+        }
+    }
+
+    override suspend fun setFilePriority(torrentId: String, fileIndex: Int, priority: FilePriority) {
+        request("torrent-set") {
+            putIds(torrentId)
+            val indexes = buildJsonArray { add(fileIndex) }
+            if (priority == FilePriority.OFF) {
+                put("files-unwanted", indexes)
+            } else {
+                put("files-wanted", indexes)
+                val key = when (priority) {
+                    FilePriority.LOW -> "priority-low"
+                    FilePriority.HIGH -> "priority-high"
+                    else -> "priority-normal"
+                }
+                put(key, indexes)
+            }
         }
     }
 
@@ -218,6 +237,9 @@ class TransmissionAdapter(
             addedTimestamp = obj["addedDate"]?.jsonPrimitive?.long?.takeIf { it > 0 },
             downloadDir = obj["downloadDir"]?.jsonPrimitive?.contentOrNull,
             error = error,
+            labels = obj["labels"]?.jsonArray
+                ?.mapNotNull { it.jsonPrimitive.contentOrNull?.takeIf(String::isNotBlank) }
+                ?: emptyList(),
         )
     }
 
@@ -227,7 +249,7 @@ class TransmissionAdapter(
         val TORRENT_FIELDS = listOf(
             "id", "name", "status", "percentDone", "rateDownload", "rateUpload", "eta",
             "totalSize", "downloadedEver", "uploadedEver", "uploadRatio", "peersConnected",
-            "addedDate", "downloadDir", "errorString",
+            "addedDate", "downloadDir", "errorString", "labels",
         )
     }
 }

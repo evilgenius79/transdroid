@@ -95,6 +95,7 @@ class TransmissionAdapterTest {
         assertEquals(1250000L, downloading.downloadRate)
         assertEquals(1220L, downloading.etaSeconds)
         assertEquals(34, downloading.peersConnected)
+        assertEquals(listOf("isos"), downloading.labels)
 
         val seeding = torrents[1]
         assertEquals(TorrentStatus.SEEDING, seeding.status)

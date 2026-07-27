@@ -17,6 +17,7 @@
 package org.transdroid.protocol.internal
 
 import java.io.IOException
+import javax.net.ssl.SSLException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -26,12 +27,17 @@ import org.transdroid.protocol.DaemonException
 
 /**
  * Executes [request] on the IO dispatcher, translating transport failures to
- * [DaemonException.Connection]. The caller owns closing the returned response.
+ * [DaemonException.Connection] and TLS trust failures to [DaemonException.UntrustedServer].
+ * The caller owns closing the returned response.
  */
 internal suspend fun OkHttpClient.executeOnIo(request: Request): Response =
     withContext(Dispatchers.IO) {
         try {
             newCall(request).execute()
+        } catch (e: SSLException) {
+            throw DaemonException.UntrustedServer(
+                "TLS to ${request.url.host}:${request.url.port} failed; the certificate may be self-signed", e,
+            )
         } catch (e: IOException) {
             throw DaemonException.Connection("Cannot reach ${request.url.host}:${request.url.port}", e)
         }

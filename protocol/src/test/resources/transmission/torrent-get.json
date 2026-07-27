@@ -16,7 +16,8 @@
         "peersConnected": 34,
         "addedDate": 1753526401,
         "downloadDir": "/downloads/complete",
-        "errorString": ""
+        "errorString": "",
+        "labels": ["isos"]
       },
       {
         "id": 2,

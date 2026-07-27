@@ -16,6 +16,7 @@
  */
 package org.transdroid.ui.settings
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -24,12 +25,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Dns
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -37,15 +42,19 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,14 +62,18 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.transdroid.R
 import org.transdroid.data.ServerProfile
 import org.transdroid.protocol.DaemonType
+import org.transdroid.protocol.discovery.DiscoveredDaemon
 import org.transdroid.ui.message
+import org.transdroid.ui.torrents.UiError
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -71,6 +84,8 @@ fun EditServerScreen(
 ) {
     val profiles by viewModel.profiles.collectAsStateWithLifecycle()
     val testState by viewModel.testState.collectAsStateWithLifecycle()
+    val certificateState by viewModel.certificateState.collectAsStateWithLifecycle()
+    val discovery by viewModel.discovery.collectAsStateWithLifecycle()
     val existing = profiles.firstOrNull { it.id == serverId }
 
     var name by rememberSaveable(existing?.id) { mutableStateOf(existing?.name.orEmpty()) }
@@ -83,11 +98,17 @@ fun EditServerScreen(
     var path by rememberSaveable(existing?.id) { mutableStateOf(existing?.path.orEmpty()) }
     var username by rememberSaveable(existing?.id) { mutableStateOf(existing?.username.orEmpty()) }
     var password by rememberSaveable(existing?.id) { mutableStateOf(existing?.password.orEmpty()) }
+    var pinnedCert by rememberSaveable(existing?.id) { mutableStateOf(existing?.pinnedCertSha256.orEmpty()) }
     var hostError by remember { mutableStateOf(false) }
     var portError by remember { mutableStateOf(false) }
 
     DisposableEffect(Unit) {
         onDispose { viewModel.resetTestState() }
+    }
+
+    // Adding a new server: look around the local network for daemons to offer
+    if (existing == null) {
+        LaunchedEffect(Unit) { viewModel.startLanScan() }
     }
 
     fun buildProfile() = ServerProfile(
@@ -100,6 +121,7 @@ fun EditServerScreen(
         path = path.trim(),
         username = username.trim(),
         password = password,
+        pinnedCertSha256 = pinnedCert,
     )
 
     fun validate(): Boolean {
@@ -143,6 +165,21 @@ fun EditServerScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            if (existing == null && (discovery.scanning || discovery.found.isNotEmpty())) {
+                DiscoverySection(
+                    state = discovery,
+                    onPick = { daemon ->
+                        type = daemon.type
+                        host = daemon.host
+                        port = daemon.port.toString()
+                        useSsl = false
+                        if (name.isBlank()) name = daemon.type.displayName()
+                        hostError = false
+                        portError = false
+                    },
+                )
+            }
+
             OutlinedTextField(
                 value = name,
                 onValueChange = { name = it },
@@ -257,6 +294,23 @@ fun EditServerScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
 
+            if (pinnedCert.isNotBlank()) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        stringResource(
+                            R.string.settings_cert_pinned,
+                            pinnedCert.uppercase().chunked(2).take(8).joinToString(":"),
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = { pinnedCert = "" }) {
+                        Text(stringResource(R.string.settings_cert_forget))
+                    }
+                }
+            }
+
             when (val state = testState) {
                 TestState.Idle -> {}
                 TestState.Testing -> Row(verticalAlignment = Alignment.CenterVertically) {
@@ -271,10 +325,67 @@ fun EditServerScreen(
                     color = MaterialTheme.colorScheme.primary,
                     style = MaterialTheme.typography.bodyMedium,
                 )
-                is TestState.Failure -> Text(
-                    state.error.message(),
+                is TestState.Failure -> Column {
+                    Text(
+                        state.error.message(),
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    if (state.error == UiError.Ssl && useSsl) {
+                        Spacer(Modifier.height(4.dp))
+                        OutlinedButton(
+                            onClick = {
+                                if (validate()) {
+                                    viewModel.fetchCertificate(host.trim(), port.toIntOrNull() ?: type.defaultSslPort)
+                                }
+                            },
+                            enabled = certificateState != CertificateState.Fetching,
+                        ) {
+                            Text(stringResource(R.string.settings_trust_cert))
+                        }
+                    }
+                }
+            }
+
+            when (val certState = certificateState) {
+                CertificateState.Idle -> {}
+                CertificateState.Fetching -> Text(
+                    stringResource(R.string.settings_cert_fetching),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                is CertificateState.Failed -> Text(
+                    certState.error.message(),
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodyMedium,
+                )
+                is CertificateState.Fetched -> AlertDialog(
+                    onDismissRequest = { viewModel.dismissCertificate() },
+                    title = { Text(stringResource(R.string.settings_trust_cert_title)) },
+                    text = {
+                        Column {
+                            Text(stringResource(R.string.settings_trust_cert_message))
+                            Spacer(Modifier.height(8.dp))
+                            Text(certState.fingerprint.subject, style = MaterialTheme.typography.bodySmall)
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                certState.fingerprint.displayFingerprint,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FontFamily.Monospace,
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            pinnedCert = certState.fingerprint.sha256
+                            viewModel.dismissCertificate()
+                            viewModel.testConnection(buildProfile())
+                        }) { Text(stringResource(R.string.settings_trust_cert_confirm)) }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { viewModel.dismissCertificate() }) {
+                            Text(stringResource(R.string.details_cancel))
+                        }
+                    },
                 )
             }
 
@@ -308,4 +419,38 @@ private fun DaemonType.displayName(): String = when (this) {
     DaemonType.QBITTORRENT -> "qBittorrent"
     DaemonType.RTORRENT -> "rTorrent"
     DaemonType.DELUGE -> "Deluge"
+}
+
+@Composable
+private fun DiscoverySection(state: DiscoveryState, onPick: (DiscoveredDaemon) -> Unit) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp)) {
+            Text(
+                stringResource(R.string.settings_discovery_title),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(Modifier.height(4.dp))
+            if (state.scanning) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(Modifier.height(18.dp).width(18.dp), strokeWidth = 2.dp)
+                    Text(
+                        "  " + stringResource(R.string.settings_discovery_scanning),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
+            state.found.forEach { daemon ->
+                ListItem(
+                    headlineContent = { Text(daemon.type.displayName()) },
+                    supportingContent = { Text("${daemon.host}:${daemon.port}") },
+                    leadingContent = {
+                        Icon(Icons.Default.Dns, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    modifier = Modifier.fillMaxWidth().clickable { onPick(daemon) },
+                )
+            }
+        }
+    }
 }

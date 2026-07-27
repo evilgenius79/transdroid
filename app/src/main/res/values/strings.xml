@@ -49,6 +49,7 @@
     <string name="details_eta">ETA</string>
     <string name="details_added">Added</string>
     <string name="details_location">Location</string>
+    <string name="details_labels">Labels</string>
     <string name="details_files_empty">No file details available</string>
     <string name="details_not_found">This torrent is no longer in the list</string>
     <string name="priority_off">Skipped</string>
@@ -127,17 +128,30 @@
     <string name="settings_torznab_url">Torznab endpoint URL</string>
     <string name="settings_torznab_url_hint">http://host:9117/api/v2.0/indexers/all/results/torznab</string>
     <string name="settings_api_key">API key</string>
+    <string name="settings_poll_interval">Refresh interval</string>
+    <string name="settings_poll_interval_value">%1$d seconds</string>
+    <string name="settings_discovery_title">Found on your network</string>
+    <string name="settings_discovery_scanning">Scanning your local network…</string>
+    <string name="settings_trust_cert">Trust this server\'s certificate…</string>
+    <string name="settings_cert_fetching">Reading the server\'s certificate…</string>
+    <string name="settings_trust_cert_title">Trust this certificate?</string>
+    <string name="settings_trust_cert_message">Only trust it if this is your own server. Compare the fingerprint with the one shown by your server software:</string>
+    <string name="settings_trust_cert_confirm">Trust</string>
+    <string name="settings_cert_pinned">Certificate pinned (%1$s…)</string>
+    <string name="settings_cert_forget">Forget</string>
 
     <!-- Notifications -->
     <string name="notification_channel_finished">Finished torrents</string>
 
     <!-- Widget -->
     <string name="widget_description">Torrent counts and speeds of your active server</string>
+    <string name="widget_no_data">Open the app to load torrents</string>
 
     <!-- Errors -->
     <string name="error_connection">Cannot connect to %1$s</string>
     <string name="error_authentication">The server rejected the user name or password</string>
     <string name="error_unexpected">Unexpected reply from the server</string>
+    <string name="error_ssl">The server\'s HTTPS certificate is not trusted</string>
 
     <plurals name="notification_finished_title">
         <item quantity="one">Torrent finished</item>

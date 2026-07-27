@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.transdroid.background.FinishedTorrentsWorker
 import org.transdroid.data.ServerProfile
+import org.transdroid.discovery.LanDiscovery
 import org.transdroid.data.ServerProfilesRepository
 import org.transdroid.data.SettingsRepository
 import org.transdroid.protocol.DaemonAdapter
@@ -39,6 +40,7 @@ class AppContainer(context: Context) {
     val profilesRepository = ServerProfilesRepository(context)
     val settingsRepository = SettingsRepository(context)
     val widgetStateRepository = WidgetStateRepository(context)
+    val lanDiscovery = LanDiscovery(context)
 
     val httpClient = DaemonAdapterFactory.defaultHttpClient()
     val rssFetcher = RssFetcher(httpClient)

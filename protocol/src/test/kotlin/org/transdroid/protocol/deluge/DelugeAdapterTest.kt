@@ -107,6 +107,7 @@ class DelugeAdapterTest {
         assertEquals("percent scale normalized to 0..1", 0.4266f, downloading.progress, 0.001f)
         assertEquals(1220L, downloading.etaSeconds)
         assertEquals(34, downloading.peersConnected)
+        assertEquals("Label plugin value maps to a label", listOf("linux-isos"), downloading.labels)
 
         val seeding = torrents[1]
         assertEquals(TorrentStatus.SEEDING, seeding.status)

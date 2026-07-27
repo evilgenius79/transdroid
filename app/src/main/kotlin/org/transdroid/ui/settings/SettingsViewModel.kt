@@ -35,6 +35,9 @@ import org.transdroid.appContainer
 import org.transdroid.background.FinishedTorrentsWorker
 import org.transdroid.data.SearchProviderConfig
 import org.transdroid.data.ServerProfile
+import org.transdroid.protocol.CertificateFingerprint
+import org.transdroid.protocol.Tls
+import org.transdroid.protocol.discovery.DiscoveredDaemon
 import org.transdroid.ui.torrents.UiError
 import org.transdroid.ui.torrents.toUiError
 
@@ -44,6 +47,19 @@ sealed class TestState {
     data class Success(val versionInfo: String) : TestState()
     data class Failure(val error: UiError) : TestState()
 }
+
+sealed class CertificateState {
+    data object Idle : CertificateState()
+    data object Fetching : CertificateState()
+    data class Fetched(val fingerprint: CertificateFingerprint) : CertificateState()
+    data class Failed(val error: UiError) : CertificateState()
+}
+
+data class DiscoveryState(
+    val scanning: Boolean = false,
+    val scanned: Boolean = false,
+    val found: List<DiscoveredDaemon> = emptyList(),
+)
 
 class SettingsViewModel(private val container: AppContainer) : ViewModel() {
 
@@ -92,6 +108,43 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
 
     fun resetTestState() {
         _testState.value = TestState.Idle
+        _certificateState.value = CertificateState.Idle
+    }
+
+    private val _certificateState = MutableStateFlow<CertificateState>(CertificateState.Idle)
+    val certificateState: StateFlow<CertificateState> = _certificateState.asStateFlow()
+
+    /** Reads the server's certificate fingerprint so the user can decide to trust it. */
+    fun fetchCertificate(host: String, port: Int) {
+        _certificateState.value = CertificateState.Fetching
+        viewModelScope.launch {
+            _certificateState.value = try {
+                CertificateState.Fetched(Tls.fetchCertificate(host, port))
+            } catch (e: Exception) {
+                CertificateState.Failed(e.toUiError(host))
+            }
+        }
+    }
+
+    fun dismissCertificate() {
+        _certificateState.value = CertificateState.Idle
+    }
+
+    private val _discovery = MutableStateFlow(DiscoveryState())
+    val discovery: StateFlow<DiscoveryState> = _discovery.asStateFlow()
+
+    /** Scans the local network once per settings session; no-op while already scanning. */
+    fun startLanScan() {
+        if (_discovery.value.scanning) return
+        _discovery.value = DiscoveryState(scanning = true)
+        viewModelScope.launch {
+            val found = try {
+                container.lanDiscovery.scan()
+            } catch (e: Exception) {
+                emptyList()
+            }
+            _discovery.value = DiscoveryState(scanning = false, scanned = true, found = found)
+        }
     }
 
     val searchProviders: StateFlow<List<SearchProviderConfig>> = container.profilesRepository.searchProviders
@@ -107,6 +160,17 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
 
     val notifyFinished: StateFlow<Boolean> = container.settingsRepository.notifyFinished
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    val pollIntervalSeconds: StateFlow<Int> = container.settingsRepository.pollIntervalSeconds
+        .stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5_000),
+            org.transdroid.data.SettingsRepository.DEFAULT_POLL_INTERVAL_SECONDS,
+        )
+
+    fun setPollInterval(seconds: Int) {
+        viewModelScope.launch { container.settingsRepository.setPollIntervalSeconds(seconds) }
+    }
 
     /** Persists the toggle and (un)schedules the background check accordingly. */
     fun setNotifyFinished(context: android.content.Context, enabled: Boolean) {

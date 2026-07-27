@@ -32,6 +32,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Dns
@@ -207,6 +208,30 @@ private fun TorrentListContent(
                     onClick = { viewModel.setFilter(filter) },
                     label = { Text(filter.label()) },
                 )
+            }
+        }
+        if (ui.availableLabels.isNotEmpty()) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                ui.availableLabels.forEach { label ->
+                    FilterChip(
+                        selected = ui.labelFilter == label,
+                        onClick = { viewModel.setLabelFilter(label) },
+                        leadingIcon = {
+                            Icon(
+                                Icons.AutoMirrored.Filled.Label,
+                                contentDescription = null,
+                                modifier = Modifier.height(16.dp),
+                            )
+                        },
+                        label = { Text(label) },
+                    )
+                }
             }
         }
         PullToRefreshBox(
