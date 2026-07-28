@@ -4,6 +4,11 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Tag to release (created at the dispatched ref if it doesn't exist)"
+        required: true
 
 permissions:
   contents: write
@@ -52,6 +57,7 @@ jobs:
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.tag_name || github.ref_name }}
           files: |
             app/build/outputs/apk/full/release/*.apk
             app/build/outputs/apk/lite/release/*.apk
