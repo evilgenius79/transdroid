@@ -5,9 +5,10 @@ Transdroid 3
 
 Manage torrents from your Android device.
 
-> **Branch notice** — this branch contains the in-development **Transdroid 3**, a ground-up
-> rewrite following the [Transdroid 3 plan](transdroid3_plan.md). The stable Transdroid 2
-> app lives on `master`, which is in maintenance mode (security/critical fixes only).
+> **Branch notice** — `master` now contains **Transdroid 3** (currently in alpha), a
+> ground-up rewrite following the [Transdroid 3 plan](transdroid3_plan.md). The final
+> Transdroid 2 code is preserved at the [`transdroid2-final`](../../tree/transdroid2-final)
+> tag and receives no further development.
 
 What has been done so far
 =========================
