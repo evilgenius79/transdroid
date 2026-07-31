@@ -45,6 +45,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -131,6 +132,15 @@ fun AddTorrentScreen(
         }
     }
 
+    // With a single configured server there is nothing to choose: a picked or opened
+    // .torrent file is added right away instead of asking for another confirming tap.
+    // (The paused checkbox sits above the picker, so that choice still comes first.)
+    LaunchedEffect(fileUri, ui.profileCount) {
+        if (fileUri != null && ui.profileCount == 1 && !submitting && error == null && !fileReadFailed) {
+            submit()
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -171,6 +181,8 @@ fun AddTorrentScreen(
                     minLines = 3,
                     modifier = Modifier.fillMaxWidth(),
                 )
+                Spacer(Modifier.height(4.dp))
+                AddPausedCheckbox(startPaused) { startPaused = it }
                 Spacer(Modifier.height(12.dp))
                 OutlinedButton(
                     onClick = {
@@ -190,6 +202,8 @@ fun AddTorrentScreen(
                         }
                     },
                 )
+                Spacer(Modifier.height(4.dp))
+                AddPausedCheckbox(startPaused) { startPaused = it }
             }
             if (fileReadFailed) {
                 Spacer(Modifier.height(8.dp))
@@ -203,23 +217,6 @@ fun AddTorrentScreen(
                 Spacer(Modifier.height(8.dp))
                 Text(it.message(), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
             }
-            Spacer(Modifier.height(8.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { startPaused = !startPaused },
-            ) {
-                Checkbox(checked = startPaused, onCheckedChange = { startPaused = it })
-                Column {
-                    Text(stringResource(R.string.add_paused), style = MaterialTheme.typography.bodyMedium)
-                    Text(
-                        stringResource(R.string.add_paused_summary),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
             Spacer(Modifier.height(16.dp))
             Button(
                 onClick = { submit() },
@@ -228,6 +225,26 @@ fun AddTorrentScreen(
             ) {
                 Text(stringResource(R.string.add_button, ui.activeProfile?.displayName ?: ""))
             }
+        }
+    }
+}
+
+@Composable
+private fun AddPausedCheckbox(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onCheckedChange(!checked) },
+    ) {
+        Checkbox(checked = checked, onCheckedChange = onCheckedChange)
+        Column {
+            Text(stringResource(R.string.add_paused), style = MaterialTheme.typography.bodyMedium)
+            Text(
+                stringResource(R.string.add_paused_summary),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

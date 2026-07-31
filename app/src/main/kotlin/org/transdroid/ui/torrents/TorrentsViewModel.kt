@@ -28,6 +28,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
@@ -85,6 +86,8 @@ data class TorrentsUiState(
     val activeProfile: ServerProfile? = null,
     /** False until the profile store has emitted, so we don't flash the welcome screen. */
     val profilesLoaded: Boolean = false,
+    /** Number of configured servers; single-server flows can skip confirmation steps. */
+    val profileCount: Int = 0,
     val torrents: List<Torrent> = emptyList(),
     /** True after the first successful load for the active profile. */
     val hasLoaded: Boolean = false,
@@ -115,12 +118,15 @@ class TorrentsViewModel(private val container: AppContainer) : ViewModel() {
 
     init {
         viewModelScope.launch {
-            container.activeProfile.collect { profile ->
+            combine(container.activeProfile, container.profilesRepository.profiles) { active, all ->
+                active to all.size
+            }.collect { (profile, count) ->
                 _ui.update { state ->
                     val switched = profile?.id != state.activeProfile?.id
                     state.copy(
                         activeProfile = profile,
                         profilesLoaded = true,
+                        profileCount = count,
                         torrents = if (switched) emptyList() else state.torrents,
                         hasLoaded = if (switched) false else state.hasLoaded,
                         files = if (switched) emptyMap() else state.files,
