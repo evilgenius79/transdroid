@@ -1,0 +1,2 @@
+* Connection help on the server screen (ports, reverse proxies/tunnels, access portals, self-signed certificates)
+* With a single server, picking or opening a .torrent file adds it immediately - no extra confirm tap
