@@ -154,6 +154,31 @@ class QbittorrentAdapterTest {
     }
 
     @Test
+    fun `add paused sends both pause field spellings`() = runTest {
+        server.enqueue(loginOk())
+        server.enqueue(MockResponse().setBody("Ok."))
+
+        adapter().addByUrl("magnet:?xt=urn:btih:abcdef", startPaused = true)
+
+        server.takeRequest() // login
+        val add = server.takeRequest().body.readUtf8()
+        assertTrue("4.x field", add.contains("paused=true"))
+        assertTrue("5.x field", add.contains("stopped=true"))
+    }
+
+    @Test
+    fun `failed add is surfaced as an error`() = runTest {
+        server.enqueue(loginOk())
+        server.enqueue(MockResponse().setBody("Fails."))
+
+        try {
+            adapter().addByUrl("http://example.com/broken.torrent")
+            fail("Expected DaemonException.UnexpectedResponse")
+        } catch (expected: DaemonException.UnexpectedResponse) {
+        }
+    }
+
+    @Test
     fun `remove sends hashes and deleteFiles`() = runTest {
         server.enqueue(loginOk())
         server.enqueue(MockResponse().setBody(""))

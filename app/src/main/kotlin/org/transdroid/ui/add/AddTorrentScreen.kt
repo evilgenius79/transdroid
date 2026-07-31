@@ -21,7 +21,9 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -32,6 +34,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -48,6 +51,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -79,6 +83,7 @@ fun AddTorrentScreen(
     var url by rememberSaveable { mutableStateOf(if (initialIsFile) "" else initialUrl) }
     var fileUri by rememberSaveable { mutableStateOf(if (initialIsFile) initialUrl else null) }
     var invalidInput by rememberSaveable { mutableStateOf(false) }
+    var startPaused by rememberSaveable { mutableStateOf(false) }
     // Deliberately not saveable: the completion callback writes to this composition's state,
     // so restoring `true` across recreation would leave the button disabled forever
     var submitting by remember { mutableStateOf(false) }
@@ -104,7 +109,7 @@ fun AddTorrentScreen(
                     submitting = false
                     fileReadFailed = true
                 } else {
-                    viewModel.addFile(contents.first, contents.second) { result ->
+                    viewModel.addFile(contents.first, contents.second, startPaused) { result ->
                         submitting = false
                         if (result == null) onDone() else error = result
                     }
@@ -119,7 +124,7 @@ fun AddTorrentScreen(
             invalidInput = true
         } else {
             submitting = true
-            viewModel.add(trimmed) { result ->
+            viewModel.add(trimmed, startPaused) { result ->
                 submitting = false
                 if (result == null) onDone() else error = result
             }
@@ -197,6 +202,23 @@ fun AddTorrentScreen(
             error?.let {
                 Spacer(Modifier.height(8.dp))
                 Text(it.message(), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { startPaused = !startPaused },
+            ) {
+                Checkbox(checked = startPaused, onCheckedChange = { startPaused = it })
+                Column {
+                    Text(stringResource(R.string.add_paused), style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        stringResource(R.string.add_paused_summary),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
             Spacer(Modifier.height(16.dp))
             Button(

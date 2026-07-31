@@ -112,7 +112,7 @@ class RssViewModel(private val container: AppContainer) : ViewModel() {
         viewModelScope.launch {
             val profile = container.activeProfile.first()
             if (profile == null) {
-                _items.update { it.copy(addError = UiError.Unexpected) }
+                _items.update { it.copy(addError = UiError.Unexpected()) }
                 return@launch
             }
             try {

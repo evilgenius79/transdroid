@@ -1,0 +1,5 @@
+* Custom HTTP headers per server, for Transmission etc. behind Cloudflare Access and similar portals
+* Add torrents paused so files can be selected before starting
+* Failed qBittorrent adds are now reported instead of showing success
+* Clearer connection errors (detects login portals answering instead of the client)
+* Port switches to 443 automatically when enabling HTTPS

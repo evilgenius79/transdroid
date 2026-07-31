@@ -45,6 +45,11 @@ data class DaemonConfig(
      * this server, or null to use normal CA validation only.
      */
     val pinnedCertSha256: String? = null,
+    /**
+     * Extra HTTP headers sent with every request to this server, e.g. Cloudflare Access
+     * service-token headers for daemons behind an access portal.
+     */
+    val customHeaders: Map<String, String> = emptyMap(),
 ) {
     val baseUrl: String
         get() = (if (useSsl) "https" else "http") + "://" + host + ":" + port

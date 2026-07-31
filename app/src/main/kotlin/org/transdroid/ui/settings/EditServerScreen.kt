@@ -99,6 +99,7 @@ fun EditServerScreen(
     var username by rememberSaveable(existing?.id) { mutableStateOf(existing?.username.orEmpty()) }
     var password by rememberSaveable(existing?.id) { mutableStateOf(existing?.password.orEmpty()) }
     var pinnedCert by rememberSaveable(existing?.id) { mutableStateOf(existing?.pinnedCertSha256.orEmpty()) }
+    var customHeaders by rememberSaveable(existing?.id) { mutableStateOf(existing?.customHeaders.orEmpty()) }
     var hostError by remember { mutableStateOf(false) }
     var portError by remember { mutableStateOf(false) }
 
@@ -124,6 +125,7 @@ fun EditServerScreen(
         username = username.trim(),
         password = password,
         pinnedCertSha256 = pinnedCert,
+        customHeaders = customHeaders.trim(),
     )
 
     fun validate(): Boolean {
@@ -257,7 +259,16 @@ fun EditServerScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Switch(checked = useSsl, onCheckedChange = { useSsl = it })
+                Switch(
+                    checked = useSsl,
+                    onCheckedChange = { checked ->
+                        // Track the type's default port across the toggle (9091 <-> 443 etc.)
+                        val oldDefault = if (useSsl) type.defaultSslPort else type.defaultPort
+                        val newDefault = if (checked) type.defaultSslPort else type.defaultPort
+                        if (port == oldDefault.toString()) port = newDefault.toString()
+                        useSsl = checked
+                    },
+                )
                 Spacer(Modifier.fillMaxWidth(0.05f))
                 Text(stringResource(R.string.settings_use_ssl))
             }
@@ -293,6 +304,15 @@ fun EditServerScreen(
                 label = { Text(stringResource(R.string.settings_password)) },
                 visualTransformation = PasswordVisualTransformation(),
                 singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = customHeaders,
+                onValueChange = { customHeaders = it },
+                label = { Text(stringResource(R.string.settings_custom_headers)) },
+                placeholder = { Text(stringResource(R.string.settings_custom_headers_hint)) },
+                supportingText = { Text(stringResource(R.string.settings_custom_headers_summary)) },
+                minLines = 2,
                 modifier = Modifier.fillMaxWidth(),
             )
 

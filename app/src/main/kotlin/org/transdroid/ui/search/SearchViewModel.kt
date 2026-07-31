@@ -97,7 +97,7 @@ class SearchViewModel(private val container: AppContainer) : ViewModel() {
         viewModelScope.launch {
             val profile = container.activeProfile.first()
             if (profile == null) {
-                _ui.update { it.copy(addError = UiError.Unexpected) }
+                _ui.update { it.copy(addError = UiError.Unexpected()) }
                 return@launch
             }
             try {

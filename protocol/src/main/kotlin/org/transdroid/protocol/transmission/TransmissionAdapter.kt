@@ -78,12 +78,18 @@ class TransmissionAdapter(
         return torrents.map { parseTorrent(it.jsonObject) }
     }
 
-    override suspend fun addByUrl(url: String) {
-        request("torrent-add") { put("filename", url) }
+    override suspend fun addByUrl(url: String, startPaused: Boolean) {
+        request("torrent-add") {
+            put("filename", url)
+            if (startPaused) put("paused", true)
+        }
     }
 
-    override suspend fun addByFile(fileName: String, contents: ByteArray) {
-        request("torrent-add") { put("metainfo", Base64.getEncoder().encodeToString(contents)) }
+    override suspend fun addByFile(fileName: String, contents: ByteArray, startPaused: Boolean) {
+        request("torrent-add") {
+            put("metainfo", Base64.getEncoder().encodeToString(contents))
+            if (startPaused) put("paused", true)
+        }
     }
 
     override suspend fun start(torrentId: String) {
@@ -183,7 +189,15 @@ class TransmissionAdapter(
             val root = try {
                 json.parseToJsonElement(text).jsonObject
             } catch (e: Exception) {
-                throw DaemonException.UnexpectedResponse("Not a Transmission RPC response", e)
+                // A reverse proxy or access portal (e.g. Cloudflare Access) commonly answers
+                // with an HTML login page; make that diagnosable instead of a generic error
+                val hint = if (text.trimStart().startsWith("<")) {
+                    "Transmission's address answered with a web page instead of RPC — " +
+                        "a login portal (such as Cloudflare Access) may be in front of it"
+                } else {
+                    "Not a Transmission RPC response"
+                }
+                throw DaemonException.UnexpectedResponse(hint, e)
             }
             val result = root["result"]?.jsonPrimitive?.contentOrNull
             if (result != "success") {

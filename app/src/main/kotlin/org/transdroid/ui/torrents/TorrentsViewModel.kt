@@ -46,14 +46,15 @@ sealed class UiError {
     data class Connection(val host: String) : UiError()
     data object Authentication : UiError()
     data object Ssl : UiError()
-    data object Unexpected : UiError()
+    data class Unexpected(val detail: String? = null) : UiError()
 }
 
 internal fun Throwable.toUiError(host: String): UiError = when (this) {
     is DaemonException.Connection -> UiError.Connection(host)
     is DaemonException.Authentication -> UiError.Authentication
     is DaemonException.UntrustedServer -> UiError.Ssl
-    else -> UiError.Unexpected
+    is DaemonException.UnexpectedResponse -> UiError.Unexpected(message)
+    else -> UiError.Unexpected()
 }
 
 enum class TorrentFilter {
@@ -221,11 +222,11 @@ class TorrentsViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     /** Adds a torrent by magnet/URL; invokes [onResult] with null on success. */
-    fun add(url: String, onResult: (UiError?) -> Unit) {
+    fun add(url: String, startPaused: Boolean = false, onResult: (UiError?) -> Unit) {
         val profile = _ui.value.activeProfile ?: return
         viewModelScope.launch {
             try {
-                container.adapterFor(profile).addByUrl(url)
+                container.adapterFor(profile).addByUrl(url, startPaused)
                 refreshNow(showSpinner = false)
                 onResult(null)
             } catch (e: CancellationException) {
@@ -237,11 +238,11 @@ class TorrentsViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     /** Adds a torrent from the raw contents of a .torrent file. */
-    fun addFile(fileName: String, contents: ByteArray, onResult: (UiError?) -> Unit) {
+    fun addFile(fileName: String, contents: ByteArray, startPaused: Boolean = false, onResult: (UiError?) -> Unit) {
         val profile = _ui.value.activeProfile ?: return
         viewModelScope.launch {
             try {
-                container.adapterFor(profile).addByFile(fileName, contents)
+                container.adapterFor(profile).addByFile(fileName, contents, startPaused)
                 refreshNow(showSpinner = false)
                 onResult(null)
             } catch (e: CancellationException) {

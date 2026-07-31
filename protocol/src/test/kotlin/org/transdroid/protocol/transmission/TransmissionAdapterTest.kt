@@ -135,6 +135,28 @@ class TransmissionAdapterTest {
         val body = server.takeRequest().body.readUtf8()
         assertTrue(body.contains("\"method\":\"torrent-add\""))
         assertTrue(body.contains("magnet:?xt=urn:btih:abcdef"))
+        assertTrue("not paused unless requested", !body.contains("\"paused\""))
+    }
+
+    @Test
+    fun `add paused sends the paused flag`() = runTest {
+        server.enqueue(MockResponse().setBody("""{"result":"success","arguments":{}}"""))
+
+        adapter.addByUrl("magnet:?xt=urn:btih:abcdef", startPaused = true)
+
+        assertTrue(server.takeRequest().body.readUtf8().contains("\"paused\":true"))
+    }
+
+    @Test
+    fun `html login portal answer produces a diagnosable error`() = runTest {
+        server.enqueue(MockResponse().setBody("<html><body>Cloudflare Access login</body></html>"))
+
+        try {
+            adapter.listTorrents()
+            fail("Expected DaemonException.UnexpectedResponse")
+        } catch (expected: DaemonException.UnexpectedResponse) {
+            assertTrue(expected.message!!.contains("web page"))
+        }
     }
 
     @Test

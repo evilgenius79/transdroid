@@ -65,18 +65,30 @@ class QbittorrentAdapter(
         return infos.map { it.toTorrent() }
     }
 
-    override suspend fun addByUrl(url: String) {
-        val form = FormBody.Builder().add("urls", url).build()
+    override suspend fun addByUrl(url: String, startPaused: Boolean) {
+        val form = FormBody.Builder().add("urls", url).apply {
+            if (startPaused) {
+                // qBittorrent 4.x reads "paused", 5.x reads "stopped"; unknown fields are ignored
+                add("paused", "true")
+                add("stopped", "true")
+            }
+        }.build()
         post("api/v2/torrents/add", form).use { it.checkAddSucceeded() }
     }
 
-    override suspend fun addByFile(fileName: String, contents: ByteArray) {
+    override suspend fun addByFile(fileName: String, contents: ByteArray, startPaused: Boolean) {
         val body = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
             .addFormDataPart(
                 "torrents", fileName,
                 contents.toRequestBody("application/x-bittorrent".toMediaType()),
             )
+            .apply {
+                if (startPaused) {
+                    addFormDataPart("paused", "true")
+                    addFormDataPart("stopped", "true")
+                }
+            }
             .build()
         post("api/v2/torrents/add", body).use { it.checkAddSucceeded() }
     }

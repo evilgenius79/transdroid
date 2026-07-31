@@ -37,6 +37,8 @@ data class ServerProfile(
     val password: String = "",
     /** SHA-256 (lowercase hex) of an explicitly trusted self-signed certificate, or empty. */
     val pinnedCertSha256: String = "",
+    /** Extra HTTP headers, one "Name: Value" per line (e.g. Cloudflare Access tokens). */
+    val customHeaders: String = "",
     val extras: Map<String, String> = emptyMap(),
 ) {
     val displayName: String
@@ -51,7 +53,18 @@ data class ServerProfile(
         username = username.takeIf { it.isNotBlank() },
         password = password.takeIf { it.isNotBlank() },
         pinnedCertSha256 = pinnedCertSha256.takeIf { it.isNotBlank() },
+        customHeaders = parseHeaders(customHeaders),
     )
+
+    private fun parseHeaders(raw: String): Map<String, String> = raw.lines()
+        .mapNotNull { line ->
+            val separator = line.indexOf(':')
+            if (separator <= 0) return@mapNotNull null
+            val name = line.substring(0, separator).trim()
+            val value = line.substring(separator + 1).trim()
+            if (name.isEmpty() || value.isEmpty()) null else name to value
+        }
+        .toMap()
 }
 
 /**

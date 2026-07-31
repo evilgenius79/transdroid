@@ -121,12 +121,13 @@ class RtorrentAdapter(
         )
     }
 
-    override suspend fun addByUrl(url: String) {
-        call("load.start", "", url)
+    override suspend fun addByUrl(url: String, startPaused: Boolean) {
+        // load.normal loads without starting; load.start loads and starts
+        call(if (startPaused) "load.normal" else "load.start", "", url)
     }
 
-    override suspend fun addByFile(fileName: String, contents: ByteArray) {
-        call("load.raw_start", "", contents)
+    override suspend fun addByFile(fileName: String, contents: ByteArray, startPaused: Boolean) {
+        call(if (startPaused) "load.raw" else "load.raw_start", "", contents)
     }
 
     override suspend fun start(torrentId: String) {

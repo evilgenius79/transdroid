@@ -70,6 +70,8 @@
     <string name="add_url_hint">magnet:?xt=urn:btih:…</string>
     <string name="add_pick_file">Choose a .torrent file…</string>
     <string name="add_file_read_failed">Could not read that file</string>
+    <string name="add_paused">Add paused</string>
+    <string name="add_paused_summary">Choose which files to download first, then start it from the details screen</string>
     <string name="add_button">Add to %1$s</string>
     <string name="add_success">Torrent added</string>
     <string name="add_invalid">Enter a magnet link or http(s) URL to a torrent file</string>
@@ -139,6 +141,9 @@
     <string name="settings_trust_cert_confirm">Trust</string>
     <string name="settings_cert_pinned">Certificate pinned (%1$s…)</string>
     <string name="settings_cert_forget">Forget</string>
+    <string name="settings_custom_headers">Custom HTTP headers (optional)</string>
+    <string name="settings_custom_headers_hint">CF-Access-Client-Id: xxx.access\nCF-Access-Client-Secret: yyy</string>
+    <string name="settings_custom_headers_summary">One \"Name: Value\" per line; sent with every request. Needed for Cloudflare Access service tokens and similar portals.</string>
 
     <!-- Notifications -->
     <string name="notification_channel_finished">Finished torrents</string>

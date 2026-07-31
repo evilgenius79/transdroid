@@ -36,11 +36,14 @@ interface DaemonAdapter {
 
     suspend fun listTorrents(): List<Torrent>
 
-    /** Adds a torrent by magnet link or a URL to a .torrent file. */
-    suspend fun addByUrl(url: String)
+    /**
+     * Adds a torrent by magnet link or a URL to a .torrent file. With [startPaused] the
+     * torrent is added stopped, so files can be deselected before starting it.
+     */
+    suspend fun addByUrl(url: String, startPaused: Boolean = false)
 
     /** Adds a torrent from the raw bytes of a .torrent file. */
-    suspend fun addByFile(fileName: String, contents: ByteArray)
+    suspend fun addByFile(fileName: String, contents: ByteArray, startPaused: Boolean = false)
 
     suspend fun start(torrentId: String)
 
@@ -67,10 +70,18 @@ object DaemonAdapterFactory {
         .build()
 
     fun create(config: DaemonConfig, httpClient: OkHttpClient = defaultHttpClient()): DaemonAdapter {
-        val client = config.pinnedCertSha256
+        var client = config.pinnedCertSha256
             ?.takeIf { it.isNotBlank() }
             ?.let { Tls.clientWithPinnedCertificate(httpClient, it) }
             ?: httpClient
+        if (config.customHeaders.isNotEmpty()) {
+            client = client.newBuilder().addInterceptor { chain ->
+                val request = chain.request().newBuilder().apply {
+                    config.customHeaders.forEach { (name, value) -> header(name, value) }
+                }.build()
+                chain.proceed(request)
+            }.build()
+        }
         return when (config.type) {
             DaemonType.TRANSMISSION -> TransmissionAdapter(config, client)
             DaemonType.QBITTORRENT -> QbittorrentAdapter(config, client)

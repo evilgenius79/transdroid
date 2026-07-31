@@ -27,7 +27,8 @@ fun UiError.message(): String = when (this) {
     is UiError.Connection -> stringResource(R.string.error_connection, host)
     UiError.Authentication -> stringResource(R.string.error_authentication)
     UiError.Ssl -> stringResource(R.string.error_ssl)
-    UiError.Unexpected -> stringResource(R.string.error_unexpected)
+    is UiError.Unexpected ->
+        detail ?: stringResource(R.string.error_unexpected)
 }
 
 @Composable

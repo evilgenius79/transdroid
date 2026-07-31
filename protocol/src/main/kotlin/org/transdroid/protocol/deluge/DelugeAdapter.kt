@@ -138,18 +138,20 @@ class DelugeAdapter(
         )
     }
 
-    override suspend fun addByUrl(url: String) {
+    override suspend fun addByUrl(url: String, startPaused: Boolean) {
         ensureAuthenticated()
+        val options = buildJsonObject { if (startPaused) put("add_paused", true) }
         if (url.startsWith("magnet:")) {
-            call("core.add_torrent_magnet", url, buildJsonObject {})
+            call("core.add_torrent_magnet", url, options)
         } else {
-            call("core.add_torrent_url", url, buildJsonObject {})
+            call("core.add_torrent_url", url, options)
         }
     }
 
-    override suspend fun addByFile(fileName: String, contents: ByteArray) {
+    override suspend fun addByFile(fileName: String, contents: ByteArray, startPaused: Boolean) {
         ensureAuthenticated()
-        call("core.add_torrent_file", fileName, Base64.getEncoder().encodeToString(contents), buildJsonObject {})
+        val options = buildJsonObject { if (startPaused) put("add_paused", true) }
+        call("core.add_torrent_file", fileName, Base64.getEncoder().encodeToString(contents), options)
     }
 
     override suspend fun start(torrentId: String) {
