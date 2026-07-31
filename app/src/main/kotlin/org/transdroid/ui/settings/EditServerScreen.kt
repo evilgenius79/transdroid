@@ -30,6 +30,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material3.AlertDialog
@@ -102,9 +103,28 @@ fun EditServerScreen(
     var customHeaders by rememberSaveable(existing?.id) { mutableStateOf(existing?.customHeaders.orEmpty()) }
     var hostError by remember { mutableStateOf(false) }
     var portError by remember { mutableStateOf(false) }
+    var showHelp by remember { mutableStateOf(false) }
 
     DisposableEffect(Unit) {
         onDispose { viewModel.resetTestState() }
+    }
+
+    if (showHelp) {
+        AlertDialog(
+            onDismissRequest = { showHelp = false },
+            title = { Text(stringResource(R.string.settings_connection_help)) },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    HelpEntry(R.string.settings_help_lan_title, R.string.settings_help_lan)
+                    HelpEntry(R.string.settings_help_domain_title, R.string.settings_help_domain)
+                    HelpEntry(R.string.settings_help_portal_title, R.string.settings_help_portal)
+                    HelpEntry(R.string.settings_help_selfsigned_title, R.string.settings_help_selfsigned)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showHelp = false }) { Text(stringResource(R.string.settings_help_close)) }
+            },
+        )
     }
 
     // Adding a new server: look around the local network for daemons to offer.
@@ -149,6 +169,12 @@ fun EditServerScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { showHelp = true }) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.HelpOutline,
+                            contentDescription = stringResource(R.string.settings_connection_help),
+                        )
+                    }
                     if (existing != null) {
                         IconButton(onClick = {
                             viewModel.delete(existing.id)
@@ -250,10 +276,12 @@ fun EditServerScreen(
                 },
                 label = { Text(stringResource(R.string.settings_port)) },
                 isError = portError,
-                supportingText = if (portError) {
-                    { Text(stringResource(R.string.settings_invalid_port)) }
-                } else {
-                    null
+                supportingText = {
+                    Text(
+                        stringResource(
+                            if (portError) R.string.settings_invalid_port else R.string.settings_port_hint
+                        )
+                    )
                 },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
@@ -441,6 +469,20 @@ private fun DaemonType.displayName(): String = when (this) {
     DaemonType.QBITTORRENT -> "qBittorrent"
     DaemonType.RTORRENT -> "rTorrent"
     DaemonType.DELUGE -> "Deluge"
+}
+
+@Composable
+private fun HelpEntry(titleRes: Int, bodyRes: Int) {
+    Text(
+        stringResource(titleRes),
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.primary,
+    )
+    Text(
+        stringResource(bodyRes),
+        style = MaterialTheme.typography.bodyMedium,
+        modifier = Modifier.padding(bottom = 12.dp),
+    )
 }
 
 @Composable
