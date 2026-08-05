@@ -17,13 +17,16 @@
 package org.transdroid.ui.settings
 
 import android.Manifest
+import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -33,7 +36,9 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SettingsBackupRestore
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -46,6 +51,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -54,14 +61,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.booleanResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.UUID
 import org.transdroid.BuildConfig
 import org.transdroid.R
@@ -84,6 +96,40 @@ fun SettingsScreen(
 
     var editingProvider by remember { mutableStateOf<SearchProviderConfig?>(null) }
     var showProviderDialog by remember { mutableStateOf(false) }
+
+    val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+    var showExportDialog by remember { mutableStateOf(false) }
+    var pendingBackup by remember { mutableStateOf<ByteArray?>(null) }
+    var importUri by remember { mutableStateOf<Uri?>(null) }
+    val exportWrittenMessage = stringResource(R.string.backup_export_done)
+    val exportFailedMessage = stringResource(R.string.backup_export_failed)
+    val restoreWrongPassphrase = stringResource(R.string.backup_wrong_passphrase)
+    val restoreInvalid = stringResource(R.string.backup_invalid_file)
+    val restoredTemplate = stringResource(R.string.backup_restored)
+
+    val exportCreator = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream")
+    ) { uri ->
+        val bytes = pendingBackup
+        pendingBackup = null
+        if (uri != null && bytes != null) {
+            scope.launch {
+                val ok = withContext(Dispatchers.IO) {
+                    try {
+                        context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) } != null
+                    } catch (e: Exception) {
+                        false
+                    }
+                }
+                snackbarHostState.showSnackbar(if (ok) exportWrittenMessage else exportFailedMessage)
+            }
+        }
+    }
+
+    val importPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) importUri = uri
+    }
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -112,6 +158,7 @@ fun SettingsScreen(
                 Icon(Icons.Default.Add, contentDescription = stringResource(R.string.settings_add_server))
             }
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
         LazyColumn(Modifier.padding(padding).fillMaxSize()) {
             item { SectionHeader(stringResource(R.string.settings_servers)) }
@@ -221,6 +268,34 @@ fun SettingsScreen(
                 }
             }
 
+            item { SectionHeader(stringResource(R.string.settings_backup)) }
+            item {
+                ListItem(
+                    headlineContent = { Text(stringResource(R.string.backup_export)) },
+                    supportingContent = { Text(stringResource(R.string.backup_export_summary)) },
+                    leadingContent = {
+                        Icon(Icons.Default.Save, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    },
+                    modifier = Modifier.fillMaxWidth().clickable { showExportDialog = true },
+                )
+            }
+            item {
+                ListItem(
+                    headlineContent = { Text(stringResource(R.string.backup_import)) },
+                    supportingContent = { Text(stringResource(R.string.backup_import_summary)) },
+                    leadingContent = {
+                        Icon(
+                            Icons.Default.SettingsBackupRestore,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth().clickable {
+                        importPicker.launch(arrayOf("application/octet-stream", "*/*"))
+                    },
+                )
+            }
+
             item {
                 Column(Modifier.padding(16.dp)) {
                     Text(
@@ -231,6 +306,59 @@ fun SettingsScreen(
                 }
             }
         }
+    }
+
+    if (showExportDialog) {
+        PassphraseDialog(
+            title = stringResource(R.string.backup_export),
+            message = stringResource(R.string.backup_export_message),
+            confirmLabel = stringResource(R.string.backup_export_confirm),
+            onDismiss = { showExportDialog = false },
+            onConfirm = { passphrase ->
+                showExportDialog = false
+                viewModel.createBackup(passphrase) { bytes ->
+                    pendingBackup = bytes
+                    exportCreator.launch("transdroid-backup.tdbk")
+                }
+            },
+        )
+    }
+
+    importUri?.let { uri ->
+        PassphraseDialog(
+            title = stringResource(R.string.backup_import),
+            message = stringResource(R.string.backup_import_message),
+            confirmLabel = stringResource(R.string.backup_import_confirm),
+            onDismiss = { importUri = null },
+            onConfirm = { passphrase ->
+                importUri = null
+                scope.launch {
+                    val bytes = withContext(Dispatchers.IO) {
+                        try {
+                            context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                        } catch (e: Exception) {
+                            null
+                        }
+                    }
+                    if (bytes == null || bytes.size > MAX_BACKUP_BYTES) {
+                        snackbarHostState.showSnackbar(restoreInvalid)
+                        return@launch
+                    }
+                    viewModel.restoreBackup(bytes, passphrase) { result ->
+                        scope.launch {
+                            snackbarHostState.showSnackbar(
+                                when (result) {
+                                    is SettingsViewModel.RestoreResult.Success ->
+                                        String.format(restoredTemplate, result.serverCount)
+                                    SettingsViewModel.RestoreResult.WrongPassphrase -> restoreWrongPassphrase
+                                    SettingsViewModel.RestoreResult.InvalidFile -> restoreInvalid
+                                }
+                            )
+                        }
+                    }
+                }
+            },
+        )
     }
 
     if (showProviderDialog) {
@@ -249,6 +377,45 @@ fun SettingsScreen(
             },
         )
     }
+}
+
+private const val MAX_BACKUP_BYTES = 10 * 1024 * 1024
+
+@Composable
+private fun PassphraseDialog(
+    title: String,
+    message: String,
+    confirmLabel: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var passphrase by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column {
+                Text(message)
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = passphrase,
+                    onValueChange = { passphrase = it },
+                    label = { Text(stringResource(R.string.backup_passphrase)) },
+                    visualTransformation = PasswordVisualTransformation(),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(passphrase) }, enabled = passphrase.length >= 4) {
+                Text(confirmLabel)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.details_cancel)) }
+        },
+    )
 }
 
 @Composable

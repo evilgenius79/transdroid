@@ -43,3 +43,8 @@ fun TorrentStatus.label(): String = stringResource(
         TorrentStatus.UNKNOWN -> R.string.status_unknown
     }
 )
+
+/** The status label, with the magnet metadata-fetch phase surfaced explicitly. */
+@Composable
+fun org.transdroid.protocol.Torrent.statusLabel(): String =
+    if (metadataProgress != null) stringResource(R.string.status_metadata) else status.label()

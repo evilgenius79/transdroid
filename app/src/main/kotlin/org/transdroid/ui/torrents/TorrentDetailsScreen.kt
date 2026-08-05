@@ -69,6 +69,7 @@ import org.transdroid.protocol.FilePriority
 import org.transdroid.protocol.Torrent
 import org.transdroid.protocol.TorrentStatus
 import org.transdroid.ui.label
+import org.transdroid.ui.statusLabel
 import org.transdroid.ui.theme.accentColor
 import org.transdroid.util.formatBytes
 import org.transdroid.util.formatEta
@@ -142,20 +143,20 @@ fun TorrentDetailsContent(
         Text(torrent.name, style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(12.dp))
         LinearProgressIndicator(
-            progress = { torrent.progress },
+            progress = { torrent.displayProgress },
             color = torrent.status.accentColor,
             modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(6.dp))
         Row {
             Text(
-                torrent.status.label(),
+                torrent.statusLabel(),
                 style = MaterialTheme.typography.labelLarge,
                 color = torrent.status.accentColor,
             )
             Spacer(Modifier.weight(1f))
             Text(
-                "${(torrent.progress * 100).toInt()}%",
+                "${(torrent.displayProgress * 100).toInt()}%",
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

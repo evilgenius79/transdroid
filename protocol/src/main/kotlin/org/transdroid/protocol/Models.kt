@@ -95,9 +95,18 @@ data class Torrent(
     val error: String? = null,
     /** Labels/categories assigned on the daemon (qBittorrent's single category included). */
     val labels: List<String> = emptyList(),
+    /**
+     * When a magnet transfer is still fetching its metadata, the progress (0..1) of that
+     * fetch; null once real content is known. In this phase size/progress read as zero.
+     */
+    val metadataProgress: Float? = null,
 ) {
     val isFinished: Boolean
         get() = progress >= 1f
+
+    /** Content progress normally; metadata-fetch progress while a magnet resolves. */
+    val displayProgress: Float
+        get() = metadataProgress ?: progress
 }
 
 enum class FilePriority { OFF, LOW, NORMAL, HIGH }

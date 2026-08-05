@@ -69,6 +69,24 @@
         "addedDate": 1753267201,
         "downloadDir": "/downloads/incomplete",
         "errorString": "Unregistered torrent"
+      },
+      {
+        "id": 5,
+        "name": "ida93sp2",
+        "status": 4,
+        "percentDone": 0,
+        "rateDownload": 0,
+        "rateUpload": 0,
+        "eta": -1,
+        "totalSize": 0,
+        "downloadedEver": 0,
+        "uploadedEver": 0,
+        "uploadRatio": 0,
+        "peersConnected": 56,
+        "addedDate": 1753180801,
+        "downloadDir": "/downloads/incomplete",
+        "errorString": "",
+        "metadataPercentComplete": 0.822
       }
     ]
   },

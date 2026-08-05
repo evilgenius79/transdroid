@@ -27,6 +27,7 @@
     <string name="status_queued">Queued</string>
     <string name="status_error">Error</string>
     <string name="status_unknown">Unknown</string>
+    <string name="status_metadata">Fetching metadata</string>
 
     <!-- Torrent details -->
     <string name="details_back">Back</string>
@@ -155,6 +156,23 @@
     <string name="settings_help_portal">If the test says the server answered with a web page, a login portal is in front of the client. Create a service token in the portal and put its headers in the Custom HTTP headers field, one Name: Value per line.</string>
     <string name="settings_help_selfsigned_title">Self-signed HTTPS certificate</string>
     <string name="settings_help_selfsigned">Turn HTTPS on and run Test connection; when the certificate isn\'t trusted, you\'ll be offered to inspect its fingerprint and pin it for this server.</string>
+
+    <!-- Backup -->
+    <string name="settings_backup">Backup</string>
+    <string name="backup_export">Export settings…</string>
+    <string name="backup_export_summary">Save servers, feeds and indexers to an encrypted file that survives reinstalling</string>
+    <string name="backup_import">Import settings…</string>
+    <string name="backup_import_summary">Restore from a previously exported backup file</string>
+    <string name="backup_passphrase">Passphrase</string>
+    <string name="backup_export_message">The file is encrypted with this passphrase. You\'ll need it to import, so store it safely — it cannot be recovered.</string>
+    <string name="backup_export_confirm">Export</string>
+    <string name="backup_import_message">Enter the passphrase this backup was exported with. Importing replaces all current servers, feeds and indexers.</string>
+    <string name="backup_import_confirm">Import</string>
+    <string name="backup_export_done">Backup saved</string>
+    <string name="backup_export_failed">Could not write the backup file</string>
+    <string name="backup_wrong_passphrase">Wrong passphrase for this backup</string>
+    <string name="backup_invalid_file">That is not a readable Transdroid backup file</string>
+    <string name="backup_restored">Restored %1$d server(s)</string>
 
     <!-- Notifications -->
     <string name="notification_channel_finished">Finished torrents</string>

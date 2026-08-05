@@ -25,6 +25,7 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.float
+import kotlinx.serialization.json.floatOrNull
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -254,6 +255,9 @@ class TransmissionAdapter(
             labels = obj["labels"]?.jsonArray
                 ?.mapNotNull { it.jsonPrimitive.contentOrNull?.takeIf(String::isNotBlank) }
                 ?: emptyList(),
+            metadataProgress = obj["metadataPercentComplete"]?.jsonPrimitive?.floatOrNull
+                ?.takeIf { it < 1f }
+                ?.coerceAtLeast(0f),
         )
     }
 
@@ -263,7 +267,7 @@ class TransmissionAdapter(
         val TORRENT_FIELDS = listOf(
             "id", "name", "status", "percentDone", "rateDownload", "rateUpload", "eta",
             "totalSize", "downloadedEver", "uploadedEver", "uploadRatio", "peersConnected",
-            "addedDate", "downloadDir", "errorString", "labels",
+            "addedDate", "downloadDir", "errorString", "labels", "metadataPercentComplete",
         )
     }
 }

@@ -23,6 +23,8 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import java.util.UUID
+import javax.crypto.AEADBadTagException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.first
@@ -30,9 +32,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.transdroid.AppContainer
 import org.transdroid.appContainer
 import org.transdroid.background.FinishedTorrentsWorker
+import org.transdroid.data.BackupCrypto
+import org.transdroid.data.ProfilesData
 import org.transdroid.data.SearchProviderConfig
 import org.transdroid.data.ServerProfile
 import org.transdroid.protocol.CertificateFingerprint
@@ -184,7 +189,52 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
+    /** Serializes and encrypts the whole settings store with the given passphrase. */
+    fun createBackup(passphrase: String, onReady: (ByteArray) -> Unit) {
+        viewModelScope.launch {
+            val data = container.profilesRepository.currentData()
+            val bytes = withContext(Dispatchers.Default) {
+                BackupCrypto.encrypt(
+                    backupJson.encodeToString(ProfilesData.serializer(), data).encodeToByteArray(),
+                    passphrase.toCharArray(),
+                )
+            }
+            onReady(bytes)
+        }
+    }
+
+    fun restoreBackup(bytes: ByteArray, passphrase: String, onResult: (RestoreResult) -> Unit) {
+        viewModelScope.launch {
+            val result = try {
+                val plaintext = withContext(Dispatchers.Default) {
+                    BackupCrypto.decrypt(bytes, passphrase.toCharArray())
+                }
+                val data = backupJson.decodeFromString(ProfilesData.serializer(), plaintext.decodeToString())
+                container.profilesRepository.replaceData(data)
+                // The restored profiles carry their own ids; reset the selection if stale
+                val activeId = container.settingsRepository.activeServerId.first()
+                if (data.profiles.none { it.id == activeId }) {
+                    container.settingsRepository.setActiveServer(data.profiles.firstOrNull()?.id)
+                }
+                RestoreResult.Success(data.profiles.size)
+            } catch (e: AEADBadTagException) {
+                RestoreResult.WrongPassphrase
+            } catch (e: Exception) {
+                RestoreResult.InvalidFile
+            }
+            onResult(result)
+        }
+    }
+
+    sealed class RestoreResult {
+        data class Success(val serverCount: Int) : RestoreResult()
+        data object WrongPassphrase : RestoreResult()
+        data object InvalidFile : RestoreResult()
+    }
+
     companion object {
+        private val backupJson = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer { SettingsViewModel(checkNotNull(this[APPLICATION_KEY]).appContainer) }
         }

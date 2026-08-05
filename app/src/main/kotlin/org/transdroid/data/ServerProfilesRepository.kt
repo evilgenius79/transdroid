@@ -30,6 +30,7 @@ import javax.crypto.AEADBadTagException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.retryWhen
 import kotlinx.serialization.json.Json
@@ -62,6 +63,14 @@ class ServerProfilesRepository(context: Context, cipher: ProfilesCipher = Keysto
         }
 
     val profiles: Flow<List<ServerProfile>> = data.map { it.profiles }
+
+    /** A snapshot of everything in the store, for backup export. */
+    suspend fun currentData(): ProfilesData = data.first()
+
+    /** Replaces the entire store with restored backup contents. */
+    suspend fun replaceData(newData: ProfilesData) {
+        dataStore.updateData { newData }
+    }
 
     suspend fun save(profile: ServerProfile) {
         dataStore.updateData { data ->

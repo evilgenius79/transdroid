@@ -280,6 +280,8 @@ class QbittorrentAdapter(
             downloadDir = save_path,
             error = if (state == "error" || state == "missingFiles") "Torrent in error state ($state)" else null,
             labels = listOf(category).filter { it.isNotBlank() },
+            // qBittorrent flags the metadata phase by state but reports no percentage
+            metadataProgress = if (state == "metaDL" || state == "forcedMetaDL") 0f else null,
         )
     }
 

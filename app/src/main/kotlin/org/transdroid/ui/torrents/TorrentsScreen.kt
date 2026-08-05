@@ -79,6 +79,7 @@ import org.transdroid.R
 import org.transdroid.protocol.Torrent
 import org.transdroid.ui.message
 import org.transdroid.ui.label
+import org.transdroid.ui.statusLabel
 import org.transdroid.ui.theme.accentColor
 import org.transdroid.util.formatBytes
 import org.transdroid.util.formatEta
@@ -330,19 +331,19 @@ private fun TorrentCard(torrent: Torrent, selected: Boolean, onClick: () -> Unit
             )
             Spacer(Modifier.height(8.dp))
             LinearProgressIndicator(
-                progress = { torrent.progress },
+                progress = { torrent.displayProgress },
                 color = torrent.status.accentColor,
                 modifier = Modifier.fillMaxWidth(),
             )
             Spacer(Modifier.height(6.dp))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    torrent.status.label(),
+                    torrent.statusLabel(),
                     style = MaterialTheme.typography.labelMedium,
                     color = torrent.status.accentColor,
                 )
                 Text(
-                    " · ${(torrent.progress * 100).toInt()}% · ${formatBytes(torrent.sizeBytes)}",
+                    " · ${(torrent.displayProgress * 100).toInt()}% · ${formatBytes(torrent.sizeBytes)}",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

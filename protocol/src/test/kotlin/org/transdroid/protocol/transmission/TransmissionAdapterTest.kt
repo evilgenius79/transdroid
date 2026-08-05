@@ -86,7 +86,7 @@ class TransmissionAdapterTest {
 
         val torrents = adapter.listTorrents()
 
-        assertEquals(4, torrents.size)
+        assertEquals(5, torrents.size)
         val downloading = torrents[0]
         assertEquals("1", downloading.id)
         assertEquals("ubuntu-24.04.2-desktop-amd64.iso", downloading.name)
@@ -110,6 +110,12 @@ class TransmissionAdapterTest {
         val errored = torrents[3]
         assertEquals(TorrentStatus.ERROR, errored.status)
         assertEquals("Unregistered torrent", errored.error)
+
+        // A magnet still fetching its metadata reports the fetch progress, not 0%
+        val magnet = torrents[4]
+        assertEquals(0.822f, magnet.metadataProgress!!, 0.001f)
+        assertEquals(0.822f, magnet.displayProgress, 0.001f)
+        assertNull("resolved torrents must not report metadata progress", downloading.metadataProgress)
     }
 
     @Test

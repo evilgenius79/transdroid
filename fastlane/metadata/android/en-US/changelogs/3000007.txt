@@ -1,0 +1,2 @@
+* Settings backup: export servers, feeds and indexers to a passphrase-encrypted file and import them after reinstalling or on another device
+* Magnet links now show their metadata-fetch progress instead of a blank 0% entry
