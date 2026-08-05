@@ -1,0 +1,1 @@
+* Fixed: a long magnet link could push the Add button off-screen, making it impossible to add

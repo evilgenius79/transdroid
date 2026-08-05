@@ -28,7 +28,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
@@ -160,6 +163,8 @@ fun AddTorrentScreen(
             Modifier
                 .padding(padding)
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .imePadding()
                 .padding(16.dp),
         ) {
             val pickedFile = fileUri
@@ -179,6 +184,9 @@ fun AddTorrentScreen(
                         null
                     },
                     minLines = 3,
+                    // Magnet links with many trackers are enormous; cap the field so the
+                    // add button can never be pushed off-screen (text scrolls inside)
+                    maxLines = 6,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(4.dp))
