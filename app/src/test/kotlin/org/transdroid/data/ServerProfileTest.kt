@@ -56,4 +56,11 @@ class ServerProfileTest {
     fun `no headers yields an empty map`() {
         assertTrue(profile("").toDaemonConfig().customHeaders.isEmpty())
     }
+
+    @Test
+    fun `api key maps to config only when non-blank`() {
+        assertEquals("qbt_key", profile("").copy(apiKey = "qbt_key").toDaemonConfig().apiKey)
+        assertEquals(null, profile("").copy(apiKey = " ").toDaemonConfig().apiKey)
+        assertEquals(null, profile("").toDaemonConfig().apiKey)
+    }
 }

@@ -1,0 +1,3 @@
+• qBittorrent API key support (qBittorrent 5.2+): paste a key generated
+  under Options → WebUI → API Key and the app authenticates every request
+  with it — no username/password login needed

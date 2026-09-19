@@ -132,6 +132,7 @@
     <string name="settings_torznab_url">Torznab endpoint URL</string>
     <string name="settings_torznab_url_hint">http://host:9117/api/v2.0/indexers/all/results/torznab</string>
     <string name="settings_api_key">API key</string>
+    <string name="settings_api_key_summary">qBittorrent 5.2+: generate under Options → WebUI → API Key. When set, the user name and password are not used.</string>
     <string name="settings_poll_interval">Refresh interval</string>
     <string name="settings_poll_interval_value">%1$d seconds</string>
     <string name="settings_discovery_title">Found on your network</string>

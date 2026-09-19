@@ -41,6 +41,11 @@ data class DaemonConfig(
     val username: String? = null,
     val password: String? = null,
     /**
+     * Client-issued API key, used instead of username/password where the daemon supports
+     * it (qBittorrent 5.2+, sent as an Authorization: Bearer header).
+     */
+    val apiKey: String? = null,
+    /**
      * Lowercase hex SHA-256 of a self-signed certificate the user explicitly trusts for
      * this server, or null to use normal CA validation only.
      */

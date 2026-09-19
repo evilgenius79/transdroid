@@ -39,6 +39,10 @@ import org.transdroid.protocol.internal.joinPath
  * Adapter for the qBittorrent Web API v2 (REST over HTTP with SID cookie auth), as documented
  * in https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-4.1). Also covers
  * qBittorrent 5.x, which renamed the pause/resume endpoints to stop/start; both are tried.
+ *
+ * With [DaemonConfig.apiKey] set (qBittorrent 5.2+), authentication is stateless: every
+ * request carries an Authorization: Bearer header and the login/logout endpoints — which
+ * reject API keys by design — are never called.
  */
 class QbittorrentAdapter(
     override val config: DaemonConfig,
@@ -46,6 +50,8 @@ class QbittorrentAdapter(
 ) : DaemonAdapter {
 
     private val json = Json { ignoreUnknownKeys = true }
+
+    private val apiKey: String? = config.apiKey?.takeIf { it.isNotBlank() }
 
     @Volatile
     private var sessionCookie: String? = null
@@ -167,7 +173,7 @@ class QbittorrentAdapter(
     }
 
     private suspend fun ensureAuthenticated() {
-        if (sessionCookie != null || config.username.isNullOrEmpty()) return
+        if (apiKey != null || sessionCookie != null || config.username.isNullOrEmpty()) return
         login()
     }
 
@@ -213,7 +219,7 @@ class QbittorrentAdapter(
     ): Response {
         ensureAuthenticated()
         var response = send(build())
-        if (response.code == 403 && !config.username.isNullOrEmpty()) {
+        if (response.code == 403 && apiKey == null && !config.username.isNullOrEmpty()) {
             response.close()
             login()
             response = send(build())
@@ -221,7 +227,13 @@ class QbittorrentAdapter(
         when {
             response.code == 401 || response.code == 403 -> {
                 response.close()
-                throw DaemonException.Authentication("qBittorrent requires a valid username/password")
+                throw DaemonException.Authentication(
+                    if (apiKey != null) {
+                        "qBittorrent rejected the API key (requires qBittorrent 5.2+ and a current key)"
+                    } else {
+                        "qBittorrent requires a valid username/password"
+                    }
+                )
             }
             response.code == 404 && allowNotFound -> return response
             !response.isSuccessful -> {
@@ -234,7 +246,11 @@ class QbittorrentAdapter(
     }
 
     private suspend fun send(builder: Request.Builder): Response {
-        sessionCookie?.let { builder.header("Cookie", it) }
+        if (apiKey != null) {
+            builder.header("Authorization", "Bearer $apiKey")
+        } else {
+            sessionCookie?.let { builder.header("Cookie", it) }
+        }
         return httpClient.executeOnIo(builder.build())
     }
 

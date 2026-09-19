@@ -47,13 +47,18 @@ class QbittorrentAdapterTest {
         server.shutdown()
     }
 
-    private fun adapter(username: String? = "admin", password: String? = "adminadmin") = QbittorrentAdapter(
+    private fun adapter(
+        username: String? = "admin",
+        password: String? = "adminadmin",
+        apiKey: String? = null,
+    ) = QbittorrentAdapter(
         DaemonConfig(
             type = DaemonType.QBITTORRENT,
             host = server.hostName,
             port = server.port,
             username = username,
             password = password,
+            apiKey = apiKey,
         ),
         OkHttpClient(),
     )
@@ -138,6 +143,52 @@ class QbittorrentAdapterTest {
 
         assertEquals(4, torrents.size)
         assertEquals("/api/v2/torrents/info", server.takeRequest().path)
+    }
+
+    @Test
+    fun `api key skips login and sends bearer header`() = runTest {
+        server.enqueue(MockResponse().setBody(fixture("torrents-info.json")))
+
+        val torrents = adapter(apiKey = "qbt_abcdefghijklmnopqrstuvwxyz12").listTorrents()
+
+        assertEquals(4, torrents.size)
+        val request = server.takeRequest()
+        assertEquals("no login call must precede the api call", "/api/v2/torrents/info", request.path)
+        assertEquals("Bearer qbt_abcdefghijklmnopqrstuvwxyz12", request.getHeader("Authorization"))
+        assertNull("cookie auth must not be mixed in", request.getHeader("Cookie"))
+    }
+
+    @Test
+    fun `api key takes precedence over username and password`() = runTest {
+        server.enqueue(MockResponse().setBody(fixture("torrents-info.json")))
+
+        adapter(username = "admin", password = "adminadmin", apiKey = "qbt_key").listTorrents()
+
+        assertEquals(1, server.requestCount)
+        assertEquals("Bearer qbt_key", server.takeRequest().getHeader("Authorization"))
+    }
+
+    @Test
+    fun `rejected api key maps to authentication error without login retry`() = runTest {
+        server.enqueue(MockResponse().setResponseCode(403))
+
+        try {
+            adapter(apiKey = "qbt_expiredKey").listTorrents()
+            fail("Expected DaemonException.Authentication")
+        } catch (expected: DaemonException.Authentication) {
+            assertTrue("message should name the API key", expected.message!!.contains("API key"))
+        }
+        assertEquals("a bad key must not trigger a cookie login retry", 1, server.requestCount)
+    }
+
+    @Test
+    fun `blank api key falls back to cookie login`() = runTest {
+        server.enqueue(loginOk())
+        server.enqueue(MockResponse().setBody(fixture("torrents-info.json")))
+
+        adapter(apiKey = "  ").listTorrents()
+
+        assertEquals("/api/v2/auth/login", server.takeRequest().path)
     }
 
     @Test

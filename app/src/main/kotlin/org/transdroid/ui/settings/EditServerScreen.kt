@@ -99,6 +99,7 @@ fun EditServerScreen(
     var path by rememberSaveable(existing?.id) { mutableStateOf(existing?.path.orEmpty()) }
     var username by rememberSaveable(existing?.id) { mutableStateOf(existing?.username.orEmpty()) }
     var password by rememberSaveable(existing?.id) { mutableStateOf(existing?.password.orEmpty()) }
+    var apiKey by rememberSaveable(existing?.id) { mutableStateOf(existing?.apiKey.orEmpty()) }
     var pinnedCert by rememberSaveable(existing?.id) { mutableStateOf(existing?.pinnedCertSha256.orEmpty()) }
     var customHeaders by rememberSaveable(existing?.id) { mutableStateOf(existing?.customHeaders.orEmpty()) }
     var hostError by remember { mutableStateOf(false) }
@@ -144,6 +145,7 @@ fun EditServerScreen(
         path = path.trim(),
         username = username.trim(),
         password = password,
+        apiKey = if (type == DaemonType.QBITTORRENT) apiKey.trim() else "",
         pinnedCertSha256 = pinnedCert,
         customHeaders = customHeaders.trim(),
     )
@@ -334,6 +336,17 @@ fun EditServerScreen(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
+            if (type == DaemonType.QBITTORRENT) {
+                OutlinedTextField(
+                    value = apiKey,
+                    onValueChange = { apiKey = it },
+                    label = { Text(stringResource(R.string.settings_api_key)) },
+                    supportingText = { Text(stringResource(R.string.settings_api_key_summary)) },
+                    visualTransformation = PasswordVisualTransformation(),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
             OutlinedTextField(
                 value = customHeaders,
                 onValueChange = { customHeaders = it },
