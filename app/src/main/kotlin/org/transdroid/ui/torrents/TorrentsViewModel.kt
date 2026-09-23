@@ -44,20 +44,33 @@ import org.transdroid.protocol.TorrentFile
 import org.transdroid.protocol.TorrentStatus
 import org.transdroid.protocol.TrackerInfo
 
-/** User-facing error kinds; mapped to localized strings in the UI layer. */
+/**
+ * User-facing error kinds; mapped to localized strings in the UI layer. [detail] carries
+ * the exact underlying error text (HTTP codes included) for the error-details dialog.
+ */
 sealed class UiError {
-    data class Connection(val host: String) : UiError()
-    data object Authentication : UiError()
-    data object Ssl : UiError()
-    data class Unexpected(val detail: String? = null) : UiError()
+    abstract val detail: String?
+
+    data class Connection(val host: String, override val detail: String? = null) : UiError()
+    data class Authentication(override val detail: String? = null) : UiError()
+    data class Ssl(override val detail: String? = null) : UiError()
+    data class Unexpected(override val detail: String? = null) : UiError()
 }
 
+/** The exception's own message plus any distinct cause messages, oldest last. */
+internal fun Throwable.detailChain(): String? =
+    generateSequence(this as Throwable?) { it.cause }
+        .mapNotNull { it.message?.trim()?.takeIf(String::isNotEmpty) }
+        .distinct()
+        .joinToString(" — ")
+        .takeIf { it.isNotEmpty() }
+
 internal fun Throwable.toUiError(host: String): UiError = when (this) {
-    is DaemonException.Connection -> UiError.Connection(host)
-    is DaemonException.Authentication -> UiError.Authentication
-    is DaemonException.UntrustedServer -> UiError.Ssl
-    is DaemonException.UnexpectedResponse -> UiError.Unexpected(message)
-    else -> UiError.Unexpected()
+    is DaemonException.Connection -> UiError.Connection(host, detailChain())
+    is DaemonException.Authentication -> UiError.Authentication(detailChain())
+    is DaemonException.UntrustedServer -> UiError.Ssl(detailChain())
+    is DaemonException.UnexpectedResponse -> UiError.Unexpected(detailChain())
+    else -> UiError.Unexpected(detailChain() ?: this::class.simpleName)
 }
 
 enum class TorrentFilter {

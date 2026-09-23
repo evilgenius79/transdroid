@@ -16,12 +16,27 @@
  */
 package org.transdroid.ui
 
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import org.transdroid.R
+import org.transdroid.ui.torrents.UiError
 
 /**
  * A classic flat, edge-to-edge progress bar in the legacy Transdroid 2 style: no rounded
@@ -36,5 +51,55 @@ fun FlatProgressBar(progress: Float, color: Color, modifier: Modifier = Modifier
         gapSize = 0.dp,
         drawStopIndicator = {},
         modifier = modifier,
+    )
+}
+
+/**
+ * Shows the exact underlying server error (HTTP codes and all) with likely causes, so
+ * a failure like "returned HTTP 502" can be diagnosed instead of guessed at.
+ */
+@Composable
+fun ErrorDetailsDialog(error: UiError, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.error_details_title)) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text(error.message(), style = MaterialTheme.typography.bodyMedium)
+                error.detail?.let { detail ->
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        stringResource(R.string.error_details_exact),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        detail,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace,
+                    )
+                }
+                val causes = error.causeHints()
+                if (causes.isNotEmpty()) {
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        stringResource(R.string.error_details_causes),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    causes.forEach { cause ->
+                        Row(Modifier.padding(vertical = 2.dp)) {
+                            Text("•  ", style = MaterialTheme.typography.bodySmall)
+                            Text(stringResource(cause), style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.settings_help_close)) }
+        },
     )
 }

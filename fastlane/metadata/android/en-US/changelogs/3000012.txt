@@ -1,0 +1,3 @@
+• Error details: tap a connection error banner (or test a connection in
+  server settings) to see the exact underlying error — HTTP status codes
+  included — plus likely causes matched to it

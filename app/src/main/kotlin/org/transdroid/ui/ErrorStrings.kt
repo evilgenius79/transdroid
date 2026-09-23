@@ -25,10 +25,55 @@ import org.transdroid.ui.torrents.UiError
 @Composable
 fun UiError.message(): String = when (this) {
     is UiError.Connection -> stringResource(R.string.error_connection, host)
-    UiError.Authentication -> stringResource(R.string.error_authentication)
-    UiError.Ssl -> stringResource(R.string.error_ssl)
+    is UiError.Authentication -> stringResource(R.string.error_authentication)
+    is UiError.Ssl -> stringResource(R.string.error_ssl)
     is UiError.Unexpected ->
         detail ?: stringResource(R.string.error_unexpected)
+}
+
+/**
+ * Likely causes for this error, as string resources, picked by the error kind and by
+ * patterns (HTTP status codes included) in the exact underlying error text.
+ */
+fun UiError.causeHints(): List<Int> {
+    val text = detail?.lowercase().orEmpty()
+    val httpCode = Regex("http (\\d{3})").find(text)?.groupValues?.get(1)?.toIntOrNull()
+    return when (this) {
+        is UiError.Authentication -> buildList {
+            if ("api key" in text) add(R.string.cause_api_key)
+            add(R.string.cause_credentials)
+            if ("blocked" in text || "ban" in text) add(R.string.cause_banned)
+            add(R.string.cause_proxy_auth)
+        }
+        is UiError.Ssl -> listOf(R.string.cause_ssl_selfsigned, R.string.cause_ssl_pin)
+        is UiError.Connection -> buildList {
+            when {
+                "unable to resolve host" in text || "unknownhost" in text -> add(R.string.cause_dns)
+                "timeout" in text || "timed out" in text -> add(R.string.cause_timeout)
+                "refused" in text -> add(R.string.cause_refused)
+                "reset" in text || "closed" in text -> add(R.string.cause_reset)
+                else -> {
+                    add(R.string.cause_refused)
+                    add(R.string.cause_timeout)
+                }
+            }
+            add(R.string.cause_offline)
+        }
+        is UiError.Unexpected -> buildList {
+            when {
+                httpCode == 404 -> add(R.string.cause_http_404)
+                httpCode == 405 || httpCode == 400 -> add(R.string.cause_http_400)
+                httpCode == 429 -> add(R.string.cause_http_429)
+                (httpCode ?: 0) in 500..504 -> add(R.string.cause_http_5xx)
+                (httpCode ?: 0) in 520..530 -> add(R.string.cause_http_cloudflare)
+                httpCode != null -> add(R.string.cause_http_other)
+                "web page" in text || "portal" in text -> add(R.string.cause_portal)
+                "parse" in text || "not a" in text -> add(R.string.cause_wrong_service)
+                else -> add(R.string.cause_generic)
+            }
+            if (httpCode != null) add(R.string.cause_check_path)
+        }
+    }
 }
 
 @Composable

@@ -73,6 +73,7 @@ import org.transdroid.R
 import org.transdroid.data.ServerProfile
 import org.transdroid.protocol.DaemonType
 import org.transdroid.protocol.discovery.DiscoveredDaemon
+import org.transdroid.ui.causeHints
 import org.transdroid.ui.message
 import org.transdroid.ui.torrents.UiError
 
@@ -394,7 +395,27 @@ fun EditServerScreen(
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodyMedium,
                     )
-                    if (state.error == UiError.Ssl && useSsl) {
+                    state.error.detail?.let { detail ->
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            detail,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = FontFamily.Monospace,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    val causes = state.error.causeHints()
+                    if (causes.isNotEmpty()) {
+                        Spacer(Modifier.height(4.dp))
+                        causes.forEach { cause ->
+                            Text(
+                                "•  " + stringResource(cause),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    if (state.error is UiError.Ssl && useSsl) {
                         Spacer(Modifier.height(4.dp))
                         OutlinedButton(
                             onClick = {

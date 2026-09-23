@@ -46,6 +46,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RssFeed
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -92,6 +93,7 @@ import org.transdroid.R
 import org.transdroid.data.SwipeAction
 import org.transdroid.protocol.Torrent
 import org.transdroid.protocol.TorrentStatus
+import org.transdroid.ui.ErrorDetailsDialog
 import org.transdroid.ui.FlatProgressBar
 import org.transdroid.ui.message
 import org.transdroid.ui.label
@@ -217,7 +219,7 @@ private fun TorrentListContent(
 ) {
     Column(Modifier.fillMaxSize()) {
         ui.error?.let { error ->
-            ErrorBanner(message = error.message(), onRetry = { viewModel.refresh() })
+            ErrorBanner(error = error, onRetry = { viewModel.refresh() })
         }
         var showNameFilter by remember { mutableStateOf(ui.nameFilter.isNotBlank()) }
         Row(
@@ -548,24 +550,34 @@ private fun TorrentCard(torrent: Torrent, selected: Boolean, onClick: () -> Unit
 }
 
 @Composable
-private fun ErrorBanner(message: String, onRetry: () -> Unit) {
+private fun ErrorBanner(error: UiError, onRetry: () -> Unit) {
+    var showDetails by remember { mutableStateOf(false) }
     Card(
+        onClick = { showDetails = true },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp),
     ) {
         Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                Icons.Outlined.Info,
+                contentDescription = stringResource(R.string.error_details_title),
+                tint = MaterialTheme.colorScheme.onErrorContainer,
+            )
             Text(
-                message,
+                error.message(),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onErrorContainer,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).padding(start = 8.dp),
             )
             TextButton(onClick = onRetry) {
                 Text(stringResource(R.string.torrents_retry))
             }
         }
+    }
+    if (showDetails) {
+        ErrorDetailsDialog(error = error, onDismiss = { showDetails = false })
     }
 }
 
