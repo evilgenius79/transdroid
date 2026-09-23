@@ -116,6 +116,19 @@ data class Torrent(
 
 enum class FilePriority { OFF, LOW, NORMAL, HIGH }
 
+/** One tracker announce URL registered on a torrent. */
+data class TrackerInfo(
+    /**
+     * Client-specific handle used to address this tracker in removal calls: a numeric
+     * tracker id for Transmission, the announce URL for qBittorrent/Deluge, and the
+     * tracker's list index for rTorrent. Opaque to callers.
+     */
+    val id: String,
+    val url: String,
+    /** Daemon-reported status or message for this tracker, when available. */
+    val status: String? = null,
+)
+
 /** One file inside a torrent. */
 data class TorrentFile(
     /** Zero-based position in the daemon's file list; used to address priority changes. */

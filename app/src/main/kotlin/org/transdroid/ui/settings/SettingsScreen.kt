@@ -32,7 +32,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
@@ -76,10 +79,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
+import androidx.compose.ui.graphics.vector.ImageVector
 import org.transdroid.BuildConfig
 import org.transdroid.R
 import org.transdroid.data.SearchProviderConfig
 import org.transdroid.data.SettingsRepository
+import org.transdroid.data.SwipeAction
+import org.transdroid.data.ThemeMode
+import org.transdroid.ui.torrents.label
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -209,6 +216,44 @@ fun SettingsScreen(
                         )
                     }
                 }
+            }
+
+            item { SectionHeader(stringResource(R.string.settings_interface)) }
+            item {
+                val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
+                OptionPickerItem(
+                    title = stringResource(R.string.settings_theme),
+                    valueText = themeMode.label(),
+                    icon = Icons.Default.DarkMode,
+                    options = ThemeMode.entries,
+                    selected = themeMode,
+                    optionLabel = { it.label() },
+                    onSelect = { viewModel.setThemeMode(it) },
+                )
+            }
+            item {
+                val swipeRight by viewModel.swipeRightAction.collectAsStateWithLifecycle()
+                OptionPickerItem(
+                    title = stringResource(R.string.settings_swipe_right),
+                    valueText = swipeRight.label(),
+                    icon = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    options = SwipeAction.entries,
+                    selected = swipeRight,
+                    optionLabel = { it.label() },
+                    onSelect = { viewModel.setSwipeRightAction(it) },
+                )
+            }
+            item {
+                val swipeLeft by viewModel.swipeLeftAction.collectAsStateWithLifecycle()
+                OptionPickerItem(
+                    title = stringResource(R.string.settings_swipe_left),
+                    valueText = swipeLeft.label(),
+                    icon = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                    options = SwipeAction.entries,
+                    selected = swipeLeft,
+                    optionLabel = { it.label() },
+                    onSelect = { viewModel.setSwipeLeftAction(it) },
+                )
             }
 
             item { SectionHeader(stringResource(R.string.settings_notifications)) }
@@ -418,6 +463,49 @@ private fun PassphraseDialog(
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.details_cancel)) }
         },
     )
+}
+
+@Composable
+private fun ThemeMode.label(): String = stringResource(
+    when (this) {
+        ThemeMode.SYSTEM -> R.string.settings_theme_system
+        ThemeMode.LIGHT -> R.string.settings_theme_light
+        ThemeMode.DARK -> R.string.settings_theme_dark
+    }
+)
+
+/** A settings row that opens a radio-button dropdown of choices. */
+@Composable
+private fun <T> OptionPickerItem(
+    title: String,
+    valueText: String,
+    icon: ImageVector,
+    options: List<T>,
+    selected: T,
+    optionLabel: @Composable (T) -> String,
+    onSelect: (T) -> Unit,
+) {
+    var menuOpen by remember { mutableStateOf(false) }
+    ListItem(
+        headlineContent = { Text(title) },
+        supportingContent = { Text(valueText) },
+        leadingContent = {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        },
+        modifier = Modifier.fillMaxWidth().clickable { menuOpen = true },
+    )
+    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+        options.forEach { option ->
+            DropdownMenuItem(
+                text = { Text(optionLabel(option)) },
+                leadingIcon = { RadioButton(selected = option == selected, onClick = null) },
+                onClick = {
+                    onSelect(option)
+                    menuOpen = false
+                },
+            )
+        }
+    }
 }
 
 @Composable

@@ -32,6 +32,7 @@ import org.transdroid.protocol.FilePriority
 import org.transdroid.protocol.Torrent
 import org.transdroid.protocol.TorrentFile
 import org.transdroid.protocol.TorrentStatus
+import org.transdroid.protocol.TrackerInfo
 import org.transdroid.protocol.internal.executeOnIo
 import org.transdroid.protocol.internal.joinPath
 
@@ -158,6 +159,40 @@ class QbittorrentAdapter(
             .add("priority", value.toString())
             .build()
         post("api/v2/torrents/filePrio", form).use { it.readBodyOrThrow() }
+    }
+
+    override suspend fun forceReannounce(torrentId: String) {
+        val form = FormBody.Builder().add("hashes", torrentId).build()
+        post("api/v2/torrents/reannounce", form).use { it.readBodyOrThrow() }
+    }
+
+    override suspend fun listTrackers(torrentId: String): List<TrackerInfo> {
+        val body = get("api/v2/torrents/trackers?hash=$torrentId").use { it.readBodyOrThrow() }
+        val trackers = try {
+            json.decodeFromString<List<TrackerEntry>>(body)
+        } catch (e: Exception) {
+            throw DaemonException.UnexpectedResponse("Cannot parse qBittorrent tracker list", e)
+        }
+        // "** [DHT] **" and friends are pseudo-trackers that cannot be removed
+        return trackers.filterNot { it.url.startsWith("**") }.map { tracker ->
+            TrackerInfo(
+                id = tracker.url,
+                url = tracker.url,
+                status = tracker.msg.takeIf { it.isNotBlank() } ?: when (tracker.status) {
+                    2 -> "Working"
+                    4 -> "Not working"
+                    else -> null
+                },
+            )
+        }
+    }
+
+    override suspend fun removeTracker(torrentId: String, tracker: TrackerInfo) {
+        val form = FormBody.Builder()
+            .add("hash", torrentId)
+            .add("urls", tracker.url)
+            .build()
+        post("api/v2/torrents/removeTrackers", form).use { it.readBodyOrThrow() }
     }
 
     /** qBittorrent 5 renamed pause/resume to stop/start; try new name first, fall back on 404. */
@@ -304,6 +339,13 @@ class QbittorrentAdapter(
             metadataProgress = if (state == "metaDL" || state == "forcedMetaDL") 0f else null,
         )
     }
+
+    @Serializable
+    private data class TrackerEntry(
+        val url: String,
+        val msg: String = "",
+        val status: Int = 0,
+    )
 
     @Serializable
     private data class FileInfo(

@@ -47,6 +47,7 @@ import org.transdroid.protocol.internal.executeOnIo
 import org.transdroid.protocol.Torrent
 import org.transdroid.protocol.TorrentFile
 import org.transdroid.protocol.TorrentStatus
+import org.transdroid.protocol.TrackerInfo
 
 /**
  * Adapter for the Transmission RPC protocol (JSON over HTTP POST), as documented in
@@ -157,6 +158,57 @@ class TransmissionAdapter(
                 }
                 put(key, indexes)
             }
+        }
+    }
+
+    override suspend fun forceReannounce(torrentId: String) {
+        request("torrent-reannounce") { putIds(torrentId) }
+    }
+
+    override suspend fun listTrackers(torrentId: String): List<TrackerInfo> {
+        val arguments = request("torrent-get") {
+            putIds(torrentId)
+            put("fields", buildJsonArray { add("trackers") })
+        }
+        val torrent = arguments["torrents"]?.jsonArray?.firstOrNull()?.jsonObject
+            ?: throw DaemonException.UnexpectedResponse("Torrent $torrentId not found")
+        return torrent["trackers"]?.jsonArray?.mapNotNull { element ->
+            val tracker = element.jsonObject
+            val announce = tracker["announce"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+            TrackerInfo(
+                id = tracker["id"]?.jsonPrimitive?.contentOrNull ?: announce,
+                url = announce,
+            )
+        } ?: emptyList()
+    }
+
+    override suspend fun removeTracker(torrentId: String, tracker: TrackerInfo) {
+        val trackerId = tracker.id.toIntOrNull()
+        try {
+            if (trackerId == null) throw DaemonException.UnexpectedResponse("No Transmission tracker id")
+            // Deprecated since Transmission 4.0 in favor of trackerList, but still honored
+            // there, and the only spelling Transmission 3.x understands
+            request("torrent-set") {
+                putIds(torrentId)
+                put("trackerRemove", buildJsonArray { add(trackerId) })
+            }
+        } catch (e: DaemonException.UnexpectedResponse) {
+            removeViaTrackerList(torrentId, tracker.url)
+        }
+    }
+
+    /** Removal path for future daemons that drop trackerRemove: rewrite trackerList. */
+    private suspend fun removeViaTrackerList(torrentId: String, url: String) {
+        val arguments = request("torrent-get") {
+            putIds(torrentId)
+            put("fields", buildJsonArray { add("trackerList") })
+        }
+        val current = arguments["torrents"]?.jsonArray?.firstOrNull()?.jsonObject
+            ?.get("trackerList")?.jsonPrimitive?.contentOrNull
+            ?: throw DaemonException.UnexpectedResponse("Transmission did not report its tracker list")
+        request("torrent-set") {
+            putIds(torrentId)
+            put("trackerList", current.lines().filterNot { it.trim() == url }.joinToString("\n"))
         }
     }
 

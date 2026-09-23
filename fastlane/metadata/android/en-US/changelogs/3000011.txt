@@ -1,0 +1,8 @@
+• Swipe gestures on the torrent list: swipe right to pause/resume, left to
+  remove (with confirmation) — both configurable in Settings, including
+  re-announce or nothing
+• Tracker management: view a torrent's trackers, remove them, and force a
+  re-announce from the details screen
+• Theme setting: follow system, always light, or always dark
+• Sort by upload speed
+• Progress bars are now flat straight lines in the classic Transdroid style

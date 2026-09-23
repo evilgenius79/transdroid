@@ -28,12 +28,21 @@ import kotlinx.coroutines.flow.map
 
 private val Context.settingsDataStore by preferencesDataStore(name = "settings")
 
+/** In-app theme override; SYSTEM follows the device dark-mode setting. */
+enum class ThemeMode { SYSTEM, LIGHT, DARK }
+
+/** What a horizontal swipe on a torrent row does. */
+enum class SwipeAction { NONE, PAUSE_RESUME, REANNOUNCE, REMOVE }
+
 /** Non-sensitive app preferences. */
 class SettingsRepository(private val context: Context) {
 
     private val activeServerKey = stringPreferencesKey("active_server_id")
     private val notifyFinishedKey = booleanPreferencesKey("notify_finished")
     private val pollIntervalKey = intPreferencesKey("poll_interval_seconds")
+    private val themeModeKey = stringPreferencesKey("theme_mode")
+    private val swipeRightKey = stringPreferencesKey("swipe_right_action")
+    private val swipeLeftKey = stringPreferencesKey("swipe_left_action")
 
     val activeServerId: Flow<String?> = context.settingsDataStore.data.map { it[activeServerKey] }
 
@@ -50,6 +59,35 @@ class SettingsRepository(private val context: Context) {
     suspend fun setPollIntervalSeconds(seconds: Int) {
         context.settingsDataStore.edit { it[pollIntervalKey] = seconds.coerceIn(POLL_INTERVAL_OPTIONS.first(), POLL_INTERVAL_OPTIONS.last()) }
     }
+
+    val themeMode: Flow<ThemeMode> = context.settingsDataStore.data.map {
+        parseEnum(it[themeModeKey], ThemeMode.SYSTEM)
+    }
+
+    suspend fun setThemeMode(mode: ThemeMode) {
+        context.settingsDataStore.edit { it[themeModeKey] = mode.name }
+    }
+
+    /** Action for swiping a torrent row left-to-right (start side to end side). */
+    val swipeRightAction: Flow<SwipeAction> = context.settingsDataStore.data.map {
+        parseEnum(it[swipeRightKey], SwipeAction.PAUSE_RESUME)
+    }
+
+    /** Action for swiping a torrent row right-to-left. */
+    val swipeLeftAction: Flow<SwipeAction> = context.settingsDataStore.data.map {
+        parseEnum(it[swipeLeftKey], SwipeAction.REMOVE)
+    }
+
+    suspend fun setSwipeRightAction(action: SwipeAction) {
+        context.settingsDataStore.edit { it[swipeRightKey] = action.name }
+    }
+
+    suspend fun setSwipeLeftAction(action: SwipeAction) {
+        context.settingsDataStore.edit { it[swipeLeftKey] = action.name }
+    }
+
+    private inline fun <reified T : Enum<T>> parseEnum(raw: String?, default: T): T =
+        raw?.let { value -> enumValues<T>().firstOrNull { it.name == value } } ?: default
 
     /** Whether the background finished-torrent check and its notifications are enabled. */
     val notifyFinished: Flow<Boolean> = context.settingsDataStore.data.map { it[notifyFinishedKey] ?: false }

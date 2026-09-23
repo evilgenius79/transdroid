@@ -36,11 +36,13 @@ import kotlinx.coroutines.launch
 import org.transdroid.AppContainer
 import org.transdroid.appContainer
 import org.transdroid.data.ServerProfile
+import org.transdroid.data.SwipeAction
 import org.transdroid.protocol.DaemonException
 import org.transdroid.protocol.FilePriority
 import org.transdroid.protocol.Torrent
 import org.transdroid.protocol.TorrentFile
 import org.transdroid.protocol.TorrentStatus
+import org.transdroid.protocol.TrackerInfo
 
 /** User-facing error kinds; mapped to localized strings in the UI layer. */
 sealed class UiError {
@@ -72,12 +74,13 @@ enum class TorrentFilter {
 }
 
 enum class TorrentSort {
-    DATE_ADDED, NAME, DOWNLOAD_SPEED, RATIO;
+    DATE_ADDED, NAME, DOWNLOAD_SPEED, UPLOAD_SPEED, RATIO;
 
     fun comparator(): Comparator<Torrent> = when (this) {
         DATE_ADDED -> compareByDescending { it.addedTimestamp ?: Long.MIN_VALUE }
         NAME -> compareBy { it.name.lowercase() }
         DOWNLOAD_SPEED -> compareByDescending { it.downloadRate }
+        UPLOAD_SPEED -> compareByDescending { it.uploadRate }
         RATIO -> compareByDescending { it.ratio }
     }
 }
@@ -99,6 +102,9 @@ data class TorrentsUiState(
     val sort: TorrentSort = TorrentSort.DATE_ADDED,
     val selectedTorrentId: String? = null,
     val files: Map<String, List<TorrentFile>> = emptyMap(),
+    val trackers: Map<String, List<TrackerInfo>> = emptyMap(),
+    val swipeRightAction: SwipeAction = SwipeAction.PAUSE_RESUME,
+    val swipeLeftAction: SwipeAction = SwipeAction.REMOVE,
 ) {
     val availableLabels: List<String>
         get() = torrents.flatMap { it.labels }.distinct().sorted()
@@ -145,6 +151,14 @@ class TorrentsViewModel(private val container: AppContainer) : ViewModel() {
                     )
                 }
                 if (profile != null) refresh(showSpinner = false)
+            }
+        }
+        viewModelScope.launch {
+            combine(
+                container.settingsRepository.swipeRightAction,
+                container.settingsRepository.swipeLeftAction,
+            ) { right, left -> right to left }.collect { (right, left) ->
+                _ui.update { it.copy(swipeRightAction = right, swipeLeftAction = left) }
             }
         }
     }
@@ -221,6 +235,40 @@ class TorrentsViewModel(private val container: AppContainer) : ViewModel() {
     fun toggleStartPause(torrent: Torrent) {
         runAction { adapter ->
             if (torrent.status == TorrentStatus.PAUSED) adapter.start(torrent.id) else adapter.pause(torrent.id)
+        }
+    }
+
+    fun forceReannounce(torrent: Torrent) {
+        runAction { adapter -> adapter.forceReannounce(torrent.id) }
+    }
+
+    fun loadTrackers(torrentId: String) {
+        val profile = _ui.value.activeProfile ?: return
+        viewModelScope.launch {
+            try {
+                val trackers = container.adapterFor(profile).listTrackers(torrentId)
+                _ui.update { it.copy(trackers = it.trackers + (torrentId to trackers)) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Leave the trackers section empty; the list-level error banner covers connectivity
+            }
+        }
+    }
+
+    fun removeTracker(torrentId: String, tracker: TrackerInfo) {
+        val profile = _ui.value.activeProfile ?: return
+        viewModelScope.launch {
+            try {
+                val adapter = container.adapterFor(profile)
+                adapter.removeTracker(torrentId, tracker)
+                val trackers = adapter.listTrackers(torrentId)
+                _ui.update { it.copy(trackers = it.trackers + (torrentId to trackers)) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _ui.update { it.copy(error = e.toUiError(profile.host)) }
+            }
         }
     }
 

@@ -47,6 +47,7 @@ import org.transdroid.protocol.FilePriority
 import org.transdroid.protocol.Torrent
 import org.transdroid.protocol.TorrentFile
 import org.transdroid.protocol.TorrentStatus
+import org.transdroid.protocol.TrackerInfo
 import org.transdroid.protocol.internal.executeOnIo
 import org.transdroid.protocol.internal.joinPath
 
@@ -249,6 +250,48 @@ class DelugeAdapter(
             buildJsonArray { add(torrentId) },
             buildJsonObject { put("file_priorities", buildJsonArray { updated.forEach { add(it) } }) },
         )
+    }
+
+    override suspend fun forceReannounce(torrentId: String) {
+        ensureAuthenticated()
+        call("core.force_reannounce", buildJsonArray { add(torrentId) })
+    }
+
+    override suspend fun listTrackers(torrentId: String): List<TrackerInfo> {
+        ensureAuthenticated()
+        return fetchTrackers(torrentId).mapNotNull { tracker ->
+            val url = tracker["url"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+            TrackerInfo(id = url, url = url)
+        }
+    }
+
+    override suspend fun removeTracker(torrentId: String, tracker: TrackerInfo) {
+        ensureAuthenticated()
+        // Deluge has no single-tracker removal; write the tracker list back without it
+        val remaining = fetchTrackers(torrentId)
+            .filterNot { it["url"]?.jsonPrimitive?.contentOrNull == tracker.url }
+        call(
+            "core.set_torrent_trackers",
+            torrentId,
+            buildJsonArray {
+                remaining.forEachIndexed { index, entry ->
+                    add(buildJsonObject {
+                        put("url", entry["url"]?.jsonPrimitive?.contentOrNull ?: "")
+                        put("tier", entry["tier"]?.jsonPrimitive?.doubleOrNull?.toInt() ?: index)
+                    })
+                }
+            },
+        )
+    }
+
+    private suspend fun fetchTrackers(torrentId: String): List<JsonObject> {
+        val result = call(
+            "core.get_torrent_status",
+            torrentId,
+            buildJsonArray { add("trackers") },
+        ) as? JsonObject ?: throw DaemonException.UnexpectedResponse("Unexpected core.get_torrent_status reply")
+        return result["trackers"]?.jsonArray?.mapNotNull { it as? JsonObject }
+            ?: throw DaemonException.UnexpectedResponse("Deluge did not report trackers")
     }
 
     private suspend fun ensureAuthenticated() {

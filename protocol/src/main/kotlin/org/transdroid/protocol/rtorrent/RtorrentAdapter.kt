@@ -29,6 +29,7 @@ import org.transdroid.protocol.FilePriority
 import org.transdroid.protocol.Torrent
 import org.transdroid.protocol.TorrentFile
 import org.transdroid.protocol.TorrentStatus
+import org.transdroid.protocol.TrackerInfo
 import org.transdroid.protocol.internal.executeOnIo
 
 /**
@@ -191,6 +192,29 @@ class RtorrentAdapter(
         }
         call("f.priority.set", "$torrentId:f$fileIndex", value)
         call("d.update_priorities", torrentId)
+    }
+
+    override suspend fun forceReannounce(torrentId: String) {
+        call("d.tracker_announce", torrentId)
+    }
+
+    override suspend fun listTrackers(torrentId: String): List<TrackerInfo> {
+        val rows = call("t.multicall", torrentId, "", "t.url=", "t.is_enabled=") as? List<*>
+            ?: throw DaemonException.UnexpectedResponse("Unexpected t.multicall reply")
+        return rows.mapIndexedNotNull { index, row ->
+            val fields = row as? List<*> ?: return@mapIndexedNotNull null
+            // Disabled trackers are what removeTracker leaves behind; hide them
+            if ((fields.getOrNull(1) as? Long) == 0L) return@mapIndexedNotNull null
+            TrackerInfo(id = index.toString(), url = fields.getOrNull(0)?.toString().orEmpty())
+        }
+    }
+
+    override suspend fun removeTracker(torrentId: String, tracker: TrackerInfo) {
+        // rTorrent's XML-RPC cannot delete a tracker from a download; permanently
+        // disabling it is the closest equivalent, and listTrackers hides disabled ones
+        val index = tracker.id.toIntOrNull()
+            ?: throw DaemonException.UnexpectedResponse("Not an rTorrent tracker index: ${tracker.id}")
+        call("t.is_enabled.set", "$torrentId:t$index", 0L)
     }
 
     private suspend fun call(method: String, vararg params: Any?): Any? {

@@ -20,6 +20,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -30,6 +32,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -42,7 +46,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
@@ -68,6 +71,8 @@ import org.transdroid.R
 import org.transdroid.protocol.FilePriority
 import org.transdroid.protocol.Torrent
 import org.transdroid.protocol.TorrentStatus
+import org.transdroid.protocol.TrackerInfo
+import org.transdroid.ui.FlatProgressBar
 import org.transdroid.ui.label
 import org.transdroid.ui.statusLabel
 import org.transdroid.ui.theme.accentColor
@@ -123,6 +128,7 @@ fun TorrentDetailsScreen(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun TorrentDetailsContent(
     viewModel: TorrentsViewModel,
@@ -131,8 +137,12 @@ fun TorrentDetailsContent(
 ) {
     val ui by viewModel.ui.collectAsStateWithLifecycle()
     var showRemoveDialog by remember { mutableStateOf(false) }
+    var trackerToRemove by remember { mutableStateOf<TrackerInfo?>(null) }
 
-    LaunchedEffect(torrent.id) { viewModel.loadFiles(torrent.id) }
+    LaunchedEffect(torrent.id) {
+        viewModel.loadFiles(torrent.id)
+        viewModel.loadTrackers(torrent.id)
+    }
 
     Column(
         Modifier
@@ -142,8 +152,8 @@ fun TorrentDetailsContent(
     ) {
         Text(torrent.name, style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(12.dp))
-        LinearProgressIndicator(
-            progress = { torrent.displayProgress },
+        FlatProgressBar(
+            progress = torrent.displayProgress,
             color = torrent.status.accentColor,
             modifier = Modifier.fillMaxWidth(),
         )
@@ -167,7 +177,7 @@ fun TorrentDetailsContent(
         }
 
         Spacer(Modifier.height(16.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             val paused = torrent.status == TorrentStatus.PAUSED
             Button(onClick = { viewModel.toggleStartPause(torrent) }) {
                 Icon(
@@ -177,6 +187,10 @@ fun TorrentDetailsContent(
                 Text(
                     " " + stringResource(if (paused) R.string.details_start else R.string.details_pause)
                 )
+            }
+            OutlinedButton(onClick = { viewModel.forceReannounce(torrent) }) {
+                Icon(Icons.Default.Campaign, contentDescription = null)
+                Text(" " + stringResource(R.string.details_reannounce))
             }
             OutlinedButton(onClick = { showRemoveDialog = true }) {
                 Icon(Icons.Default.Delete, contentDescription = null)
@@ -215,6 +229,50 @@ fun TorrentDetailsContent(
             )
         }
         torrent.downloadDir?.let { DetailRow(stringResource(R.string.details_location), it) }
+
+        Spacer(Modifier.height(24.dp))
+        Text(
+            stringResource(R.string.details_section_trackers),
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Spacer(Modifier.height(8.dp))
+        val trackers = ui.trackers[torrent.id]
+        if (trackers.isNullOrEmpty()) {
+            Text(
+                stringResource(R.string.details_trackers_empty),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            trackers.forEachIndexed { index, tracker ->
+                if (index > 0) HorizontalDivider(Modifier.padding(vertical = 2.dp))
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            tracker.url,
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        tracker.status?.let { status ->
+                            Text(
+                                status,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    IconButton(onClick = { trackerToRemove = tracker }) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = stringResource(R.string.details_tracker_remove),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
 
         Spacer(Modifier.height(24.dp))
         Text(
@@ -275,36 +333,71 @@ fun TorrentDetailsContent(
     }
 
     if (showRemoveDialog) {
-        var alsoDeleteData by remember { mutableStateOf(false) }
-        AlertDialog(
-            onDismissRequest = { showRemoveDialog = false },
-            title = { Text(stringResource(R.string.details_remove_title)) },
-            text = {
-                Column {
-                    Text(stringResource(R.string.details_remove_message, torrent.name))
-                    Spacer(Modifier.height(8.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = alsoDeleteData, onCheckedChange = { alsoDeleteData = it })
-                        Text(stringResource(R.string.details_remove_also_data))
-                    }
-                }
+        RemoveTorrentDialog(
+            torrent = torrent,
+            onDismiss = { showRemoveDialog = false },
+            onConfirm = { alsoDeleteData ->
+                showRemoveDialog = false
+                viewModel.remove(torrent, alsoDeleteData)
+                onRemoved?.invoke()
             },
+        )
+    }
+
+    trackerToRemove?.let { tracker ->
+        AlertDialog(
+            onDismissRequest = { trackerToRemove = null },
+            title = { Text(stringResource(R.string.details_tracker_remove_title)) },
+            text = { Text(stringResource(R.string.details_tracker_remove_message, tracker.url)) },
             confirmButton = {
                 TextButton(onClick = {
-                    showRemoveDialog = false
-                    viewModel.remove(torrent, alsoDeleteData)
-                    onRemoved?.invoke()
+                    trackerToRemove = null
+                    viewModel.removeTracker(torrent.id, tracker)
                 }) {
                     Text(stringResource(R.string.details_remove_confirm))
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showRemoveDialog = false }) {
+                TextButton(onClick = { trackerToRemove = null }) {
                     Text(stringResource(R.string.details_cancel))
                 }
             },
         )
     }
+}
+
+/** Shared removal confirmation, used from the details actions and the list swipe gesture. */
+@Composable
+fun RemoveTorrentDialog(
+    torrent: Torrent,
+    onDismiss: () -> Unit,
+    onConfirm: (alsoDeleteData: Boolean) -> Unit,
+) {
+    var alsoDeleteData by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.details_remove_title)) },
+        text = {
+            Column {
+                Text(stringResource(R.string.details_remove_message, torrent.name))
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = alsoDeleteData, onCheckedChange = { alsoDeleteData = it })
+                    Text(stringResource(R.string.details_remove_also_data))
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(alsoDeleteData) }) {
+                Text(stringResource(R.string.details_remove_confirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.details_cancel))
+            }
+        },
+    )
 }
 
 @Composable

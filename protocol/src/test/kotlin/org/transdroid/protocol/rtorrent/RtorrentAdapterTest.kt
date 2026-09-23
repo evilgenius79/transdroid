@@ -32,6 +32,7 @@ import org.transdroid.protocol.DaemonException
 import org.transdroid.protocol.DaemonType
 import org.transdroid.protocol.FilePriority
 import org.transdroid.protocol.TorrentStatus
+import org.transdroid.protocol.TrackerInfo
 
 class RtorrentAdapterTest {
 
@@ -160,6 +161,49 @@ class RtorrentAdapterTest {
         val second = server.takeRequest().body.readUtf8()
         assertTrue(second.contains("<methodName>d.erase</methodName>"))
         assertTrue(second.contains("ABCDEF"))
+    }
+
+    @Test
+    fun `list trackers hides disabled entries but keeps real indexes`() = runTest {
+        server.enqueue(
+            xmlResponse(
+                "<array><data>" +
+                    "<value><array><data><value><string>https://a.example.org/announce</string></value>" +
+                    "<value><i8>0</i8></value></data></array></value>" +
+                    "<value><array><data><value><string>https://b.example.net/announce</string></value>" +
+                    "<value><i8>1</i8></value></data></array></value>" +
+                    "</data></array>"
+            )
+        )
+
+        val trackers = adapter.listTrackers("ABCDEF")
+
+        assertTrue(server.takeRequest().body.readUtf8().contains("<methodName>t.multicall</methodName>"))
+        assertEquals(1, trackers.size)
+        assertEquals("https://b.example.net/announce", trackers[0].url)
+        assertEquals("index counts hidden disabled rows too", "1", trackers[0].id)
+    }
+
+    @Test
+    fun `remove tracker disables it by index target`() = runTest {
+        server.enqueue(xmlResponse("<i8>0</i8>"))
+
+        adapter.removeTracker("ABCDEF", TrackerInfo(id = "2", url = "https://b.example.net/announce"))
+
+        val body = server.takeRequest().body.readUtf8()
+        assertTrue(body.contains("<methodName>t.is_enabled.set</methodName>"))
+        assertTrue(body.contains("ABCDEF:t2"))
+    }
+
+    @Test
+    fun `reannounce calls d tracker_announce`() = runTest {
+        server.enqueue(xmlResponse("<i8>0</i8>"))
+
+        adapter.forceReannounce("ABCDEF")
+
+        val body = server.takeRequest().body.readUtf8()
+        assertTrue(body.contains("<methodName>d.tracker_announce</methodName>"))
+        assertTrue(body.contains("ABCDEF"))
     }
 
     @Test

@@ -31,6 +31,7 @@ import org.transdroid.protocol.DaemonConfig
 import org.transdroid.protocol.DaemonException
 import org.transdroid.protocol.DaemonType
 import org.transdroid.protocol.TorrentStatus
+import org.transdroid.protocol.TrackerInfo
 
 class QbittorrentAdapterTest {
 
@@ -242,6 +243,55 @@ class QbittorrentAdapterTest {
             fail("Expected DaemonException.UnexpectedResponse")
         } catch (expected: DaemonException.UnexpectedResponse) {
         }
+    }
+
+    @Test
+    fun `tracker list hides dht pseudo entries and maps statuses`() = runTest {
+        server.enqueue(loginOk())
+        server.enqueue(
+            MockResponse().setBody(
+                """[{"url":"** [DHT] **","status":2,"msg":""},
+                    {"url":"** [PeX] **","status":2,"msg":""},
+                    {"url":"https://tracker.example.org/announce","status":2,"msg":""},
+                    {"url":"https://dead.example.net/announce","status":4,"msg":"Connection failed"}]"""
+            )
+        )
+
+        val trackers = adapter().listTrackers("abcdef")
+
+        server.takeRequest() // login
+        assertEquals("/api/v2/torrents/trackers?hash=abcdef", server.takeRequest().path)
+        assertEquals(2, trackers.size)
+        assertEquals("Working", trackers[0].status)
+        assertEquals("Connection failed", trackers[1].status)
+    }
+
+    @Test
+    fun `remove tracker posts hash and url`() = runTest {
+        server.enqueue(loginOk())
+        server.enqueue(MockResponse().setBody(""))
+
+        adapter().removeTracker("abcdef", TrackerInfo(id = "x", url = "https://tracker.example.org/announce"))
+
+        server.takeRequest() // login
+        val request = server.takeRequest()
+        assertEquals("/api/v2/torrents/removeTrackers", request.path)
+        val body = request.body.readUtf8()
+        assertTrue(body.contains("hash=abcdef"))
+        assertTrue(body.contains("urls=https%3A%2F%2Ftracker.example.org%2Fannounce"))
+    }
+
+    @Test
+    fun `reannounce posts hashes`() = runTest {
+        server.enqueue(loginOk())
+        server.enqueue(MockResponse().setBody(""))
+
+        adapter().forceReannounce("abcdef")
+
+        server.takeRequest() // login
+        val request = server.takeRequest()
+        assertEquals("/api/v2/torrents/reannounce", request.path)
+        assertEquals("hashes=abcdef", request.body.readUtf8())
     }
 
     @Test

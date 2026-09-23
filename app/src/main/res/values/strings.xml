@@ -42,6 +42,12 @@
     <string name="details_cancel">Cancel</string>
     <string name="details_section_transfer">Transfer</string>
     <string name="details_section_files">Files</string>
+    <string name="details_section_trackers">Trackers</string>
+    <string name="details_trackers_empty">No trackers reported (yet)</string>
+    <string name="details_tracker_remove">Remove tracker</string>
+    <string name="details_tracker_remove_title">Remove this tracker?</string>
+    <string name="details_tracker_remove_message">%1$s will no longer be announced to for this torrent.</string>
+    <string name="details_reannounce">Re-announce</string>
     <string name="details_progress">Progress</string>
     <string name="details_size">Size</string>
     <string name="details_downloaded">Downloaded</string>
@@ -64,7 +70,17 @@
     <string name="sort_date_added">Date added</string>
     <string name="sort_name">Name</string>
     <string name="sort_download_speed">Download speed</string>
+    <string name="sort_upload_speed">Upload speed</string>
     <string name="sort_ratio">Ratio</string>
+    <string name="swipe_action_none">Nothing</string>
+    <string name="swipe_action_pause_resume">Pause / resume</string>
+    <string name="settings_interface">Interface</string>
+    <string name="settings_theme">Theme</string>
+    <string name="settings_theme_system">Follow system</string>
+    <string name="settings_theme_light">Light</string>
+    <string name="settings_theme_dark">Dark</string>
+    <string name="settings_swipe_right">Swipe right on a torrent</string>
+    <string name="settings_swipe_left">Swipe left on a torrent</string>
 
     <!-- Add torrent -->
     <string name="add_title">Add torrent</string>

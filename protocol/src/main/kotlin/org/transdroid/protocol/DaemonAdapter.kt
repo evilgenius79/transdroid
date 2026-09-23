@@ -58,6 +58,19 @@ interface DaemonAdapter {
      * NORMAL; OFF always means "do not download".
      */
     suspend fun setFilePriority(torrentId: String, fileIndex: Int, priority: FilePriority)
+
+    /** Asks the daemon to announce to this torrent's trackers now. */
+    suspend fun forceReannounce(torrentId: String)
+
+    /** Lists the tracker announce URLs registered on a torrent (DHT/PeX pseudo-entries excluded). */
+    suspend fun listTrackers(torrentId: String): List<TrackerInfo>
+
+    /**
+     * Removes a tracker from a torrent. Pass a [TrackerInfo] obtained from [listTrackers]
+     * on the same torrent. rTorrent cannot delete trackers over XML-RPC, so there the
+     * tracker is permanently disabled instead and no longer listed.
+     */
+    suspend fun removeTracker(torrentId: String, tracker: TrackerInfo)
 }
 
 object DaemonAdapterFactory {

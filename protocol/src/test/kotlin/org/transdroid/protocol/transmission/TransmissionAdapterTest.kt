@@ -32,6 +32,7 @@ import org.transdroid.protocol.DaemonException
 import org.transdroid.protocol.DaemonType
 import org.transdroid.protocol.FilePriority
 import org.transdroid.protocol.TorrentStatus
+import org.transdroid.protocol.TrackerInfo
 
 class TransmissionAdapterTest {
 
@@ -179,6 +180,67 @@ class TransmissionAdapterTest {
         assertTrue(body.contains("\"method\":\"torrent-remove\""))
         assertTrue(body.contains("\"ids\":[7]"))
         assertTrue(body.contains("\"delete-local-data\":true"))
+    }
+
+    @Test
+    fun `reannounce sends torrent-reannounce with ids`() = runTest {
+        server.enqueue(MockResponse().setBody("""{"result":"success","arguments":{}}"""))
+
+        adapter.forceReannounce("7")
+
+        val body = server.takeRequest().body.readUtf8()
+        assertTrue(body.contains("\"method\":\"torrent-reannounce\""))
+        assertTrue(body.contains("\"ids\":[7]"))
+    }
+
+    @Test
+    fun `list trackers parses announce urls and ids`() = runTest {
+        server.enqueue(
+            MockResponse().setBody(
+                """{"result":"success","arguments":{"torrents":[{"trackers":[
+                  {"id":0,"announce":"https://tracker.example.org/announce","tier":0},
+                  {"id":1,"announce":"udp://tracker.example.net:6969/announce","tier":1}]}]}}"""
+            )
+        )
+
+        val trackers = adapter.listTrackers("7")
+
+        assertEquals(2, trackers.size)
+        assertEquals("0", trackers[0].id)
+        assertEquals("https://tracker.example.org/announce", trackers[0].url)
+        assertEquals("udp://tracker.example.net:6969/announce", trackers[1].url)
+    }
+
+    @Test
+    fun `remove tracker sends trackerRemove with the tracker id`() = runTest {
+        server.enqueue(MockResponse().setBody("""{"result":"success","arguments":{}}"""))
+
+        adapter.removeTracker("7", TrackerInfo(id = "3", url = "https://tracker.example.org/announce"))
+
+        val body = server.takeRequest().body.readUtf8()
+        assertTrue(body.contains("\"method\":\"torrent-set\""))
+        assertTrue(body.contains("\"trackerRemove\":[3]"))
+    }
+
+    @Test
+    fun `remove tracker falls back to rewriting trackerList`() = runTest {
+        server.enqueue(MockResponse().setBody("""{"result":"error: invalid argument","arguments":{}}"""))
+        server.enqueue(
+            MockResponse().setBody(
+                """{"result":"success","arguments":{"torrents":[
+                  {"trackerList":"https://a.example.org/announce\n\nhttps://b.example.net/announce"}]}}"""
+            )
+        )
+        server.enqueue(MockResponse().setBody("""{"result":"success","arguments":{}}"""))
+
+        adapter.removeTracker("7", TrackerInfo(id = "1", url = "https://b.example.net/announce"))
+
+        server.takeRequest() // failed trackerRemove
+        server.takeRequest() // trackerList read
+        val body = server.takeRequest().body.readUtf8()
+        assertTrue(body.contains("\"trackerList\":"))
+        assertTrue(body.contains("https://a.example.org/announce"))
+        assertTrue("removed url must be gone", !body.contains("https://b.example.net/announce"))
     }
 
     @Test

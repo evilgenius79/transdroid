@@ -16,6 +16,7 @@
  */
 package org.transdroid.ui.torrents
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,9 +36,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RssFeed
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -52,24 +57,29 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxState
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.booleanResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -79,7 +89,10 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import org.transdroid.R
+import org.transdroid.data.SwipeAction
 import org.transdroid.protocol.Torrent
+import org.transdroid.protocol.TorrentStatus
+import org.transdroid.ui.FlatProgressBar
 import org.transdroid.ui.message
 import org.transdroid.ui.label
 import org.transdroid.ui.statusLabel
@@ -291,23 +304,141 @@ private fun TorrentListContent(
                     )
                 }
             } else {
+                var pendingRemove by remember { mutableStateOf<Torrent?>(null) }
+                val onSwipeAction: (SwipeAction, Torrent) -> Unit = { action, torrent ->
+                    when (action) {
+                        SwipeAction.NONE -> {}
+                        SwipeAction.PAUSE_RESUME -> viewModel.toggleStartPause(torrent)
+                        SwipeAction.REANNOUNCE -> viewModel.forceReannounce(torrent)
+                        SwipeAction.REMOVE -> pendingRemove = torrent
+                    }
+                }
                 LazyColumn(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxSize(),
                 ) {
                     items(ui.visibleTorrents, key = { it.id }) { torrent ->
-                        TorrentCard(
+                        SwipeableTorrentCard(
                             torrent = torrent,
                             selected = torrent.id == ui.selectedTorrentId,
+                            rightAction = ui.swipeRightAction,
+                            leftAction = ui.swipeLeftAction,
                             onClick = { onOpenDetails(torrent.id) },
+                            onSwipeAction = onSwipeAction,
                         )
                     }
+                }
+                pendingRemove?.let { torrent ->
+                    RemoveTorrentDialog(
+                        torrent = torrent,
+                        onDismiss = { pendingRemove = null },
+                        onConfirm = { alsoDeleteData ->
+                            pendingRemove = null
+                            viewModel.remove(torrent, alsoDeleteData)
+                        },
+                    )
                 }
             }
         }
     }
 }
+
+@Composable
+private fun SwipeableTorrentCard(
+    torrent: Torrent,
+    selected: Boolean,
+    rightAction: SwipeAction,
+    leftAction: SwipeAction,
+    onClick: () -> Unit,
+    onSwipeAction: (SwipeAction, Torrent) -> Unit,
+) {
+    // The state's confirmValueChange closure is created once per row; read everything
+    // through rememberUpdatedState so later recompositions (refreshes, settings changes)
+    // are seen inside it
+    val currentTorrent by rememberUpdatedState(torrent)
+    val currentRight by rememberUpdatedState(rightAction)
+    val currentLeft by rememberUpdatedState(leftAction)
+    val currentOnSwipeAction by rememberUpdatedState(onSwipeAction)
+    val dismissState = rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            when (value) {
+                SwipeToDismissBoxValue.StartToEnd -> currentOnSwipeAction(currentRight, currentTorrent)
+                SwipeToDismissBoxValue.EndToStart -> currentOnSwipeAction(currentLeft, currentTorrent)
+                SwipeToDismissBoxValue.Settled -> {}
+            }
+            // Always snap back; the action's outcome shows through the next refresh
+            // (removal asks for confirmation first), never by dismissing the card
+            false
+        },
+    )
+    SwipeToDismissBox(
+        state = dismissState,
+        enableDismissFromStartToEnd = rightAction != SwipeAction.NONE,
+        enableDismissFromEndToStart = leftAction != SwipeAction.NONE,
+        backgroundContent = {
+            SwipeActionBackground(
+                state = dismissState,
+                rightAction = rightAction,
+                leftAction = leftAction,
+                torrent = torrent,
+            )
+        },
+    ) {
+        TorrentCard(torrent = torrent, selected = selected, onClick = onClick)
+    }
+}
+
+@Composable
+private fun SwipeActionBackground(
+    state: SwipeToDismissBoxState,
+    rightAction: SwipeAction,
+    leftAction: SwipeAction,
+    torrent: Torrent,
+) {
+    val direction = state.dismissDirection
+    val action = when (direction) {
+        SwipeToDismissBoxValue.StartToEnd -> rightAction
+        SwipeToDismissBoxValue.EndToStart -> leftAction
+        else -> SwipeAction.NONE
+    }
+    val paused = torrent.status == TorrentStatus.PAUSED
+    val (icon, tint) = when (action) {
+        SwipeAction.NONE -> return
+        SwipeAction.PAUSE_RESUME ->
+            (if (paused) Icons.Default.PlayArrow else Icons.Default.Pause) to MaterialTheme.colorScheme.primary
+        SwipeAction.REANNOUNCE -> Icons.Default.Campaign to MaterialTheme.colorScheme.primary
+        SwipeAction.REMOVE -> Icons.Default.Delete to MaterialTheme.colorScheme.error
+    }
+    Box(
+        Modifier
+            .fillMaxSize()
+            .clip(CardDefaults.shape)
+            .background(tint.copy(alpha = 0.15f)),
+        contentAlignment = if (direction == SwipeToDismissBoxValue.StartToEnd) {
+            Alignment.CenterStart
+        } else {
+            Alignment.CenterEnd
+        },
+    ) {
+        Icon(
+            icon,
+            contentDescription = action.label(),
+            tint = tint,
+            modifier = Modifier.padding(horizontal = 24.dp),
+        )
+    }
+}
+
+@Composable
+fun SwipeAction.label(): String = stringResource(
+    when (this) {
+        SwipeAction.NONE -> R.string.swipe_action_none
+        SwipeAction.PAUSE_RESUME -> R.string.swipe_action_pause_resume
+        SwipeAction.REANNOUNCE -> R.string.details_reannounce
+        SwipeAction.REMOVE -> R.string.details_remove
+    }
+)
 
 @Composable
 private fun SortMenuButton(current: TorrentSort, onSelect: (TorrentSort) -> Unit) {
@@ -337,6 +468,7 @@ private fun TorrentSort.label(): String = stringResource(
         TorrentSort.DATE_ADDED -> R.string.sort_date_added
         TorrentSort.NAME -> R.string.sort_name
         TorrentSort.DOWNLOAD_SPEED -> R.string.sort_download_speed
+        TorrentSort.UPLOAD_SPEED -> R.string.sort_upload_speed
         TorrentSort.RATIO -> R.string.sort_ratio
     }
 )
@@ -371,8 +503,8 @@ private fun TorrentCard(torrent: Torrent, selected: Boolean, onClick: () -> Unit
                 overflow = TextOverflow.Ellipsis,
             )
             Spacer(Modifier.height(8.dp))
-            LinearProgressIndicator(
-                progress = { torrent.displayProgress },
+            FlatProgressBar(
+                progress = torrent.displayProgress,
                 color = torrent.status.accentColor,
                 modifier = Modifier.fillMaxWidth(),
             )

@@ -177,6 +177,27 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
         viewModelScope.launch { container.settingsRepository.setPollIntervalSeconds(seconds) }
     }
 
+    val themeMode: StateFlow<org.transdroid.data.ThemeMode> = container.settingsRepository.themeMode
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), org.transdroid.data.ThemeMode.SYSTEM)
+
+    fun setThemeMode(mode: org.transdroid.data.ThemeMode) {
+        viewModelScope.launch { container.settingsRepository.setThemeMode(mode) }
+    }
+
+    val swipeRightAction: StateFlow<org.transdroid.data.SwipeAction> = container.settingsRepository.swipeRightAction
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), org.transdroid.data.SwipeAction.PAUSE_RESUME)
+
+    val swipeLeftAction: StateFlow<org.transdroid.data.SwipeAction> = container.settingsRepository.swipeLeftAction
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), org.transdroid.data.SwipeAction.REMOVE)
+
+    fun setSwipeRightAction(action: org.transdroid.data.SwipeAction) {
+        viewModelScope.launch { container.settingsRepository.setSwipeRightAction(action) }
+    }
+
+    fun setSwipeLeftAction(action: org.transdroid.data.SwipeAction) {
+        viewModelScope.launch { container.settingsRepository.setSwipeLeftAction(action) }
+    }
+
     /** Persists the toggle and (un)schedules the background check accordingly. */
     fun setNotifyFinished(context: android.content.Context, enabled: Boolean) {
         viewModelScope.launch {

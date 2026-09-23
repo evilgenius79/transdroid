@@ -31,6 +31,7 @@ import org.transdroid.protocol.DaemonConfig
 import org.transdroid.protocol.DaemonException
 import org.transdroid.protocol.DaemonType
 import org.transdroid.protocol.TorrentStatus
+import org.transdroid.protocol.TrackerInfo
 
 class DelugeAdapterTest {
 
@@ -165,6 +166,41 @@ class DelugeAdapterTest {
         val remove = server.takeRequest().body.readUtf8()
         assertTrue(remove.contains("\"method\":\"core.remove_torrent\""))
         assertTrue(remove.contains("[\"abcdef\",true]"))
+    }
+
+    @Test
+    fun `remove tracker writes back the remaining tracker list`() = runTest {
+        server.enqueue(loginOk())
+        server.enqueue(
+            MockResponse().setBody(
+                """{"result": {"trackers": [
+                    {"url": "https://a.example.org/announce", "tier": 0},
+                    {"url": "https://b.example.net/announce", "tier": 1}]}, "error": null, "id": 2}"""
+            )
+        )
+        server.enqueue(MockResponse().setBody("""{"result": null, "error": null, "id": 3}"""))
+
+        adapter.removeTracker("abcdef", TrackerInfo(id = "https://b.example.net/announce", url = "https://b.example.net/announce"))
+
+        server.takeRequest() // login
+        assertTrue(server.takeRequest().body.readUtf8().contains("core.get_torrent_status"))
+        val setBody = server.takeRequest().body.readUtf8()
+        assertTrue(setBody.contains("core.set_torrent_trackers"))
+        assertTrue(setBody.contains("https://a.example.org/announce"))
+        assertTrue("removed url must be gone", !setBody.contains("https://b.example.net/announce"))
+    }
+
+    @Test
+    fun `reannounce passes the id as a list`() = runTest {
+        server.enqueue(loginOk())
+        server.enqueue(MockResponse().setBody("""{"result": null, "error": null, "id": 2}"""))
+
+        adapter.forceReannounce("abcdef")
+
+        server.takeRequest() // login
+        val body = server.takeRequest().body.readUtf8()
+        assertTrue(body.contains("core.force_reannounce"))
+        assertTrue(body.contains("""["abcdef"]"""))
     }
 
     @Test
