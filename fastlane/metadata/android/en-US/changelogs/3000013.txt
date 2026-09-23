@@ -1,0 +1,3 @@
+• Widget buttons now give feedback: a toast confirms the tap ("Pausing
+  torrent…") and failures show the actual error instead of silently doing
+  nothing

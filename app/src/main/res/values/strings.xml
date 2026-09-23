@@ -205,6 +205,10 @@
     <string name="error_authentication">The server rejected the user name or password</string>
     <string name="error_unexpected">Unexpected reply from the server</string>
     <string name="error_ssl">The server\'s HTTPS certificate is not trusted</string>
+    <string name="widget_action_starting">Starting torrent…</string>
+    <string name="widget_action_pausing">Pausing torrent…</string>
+    <string name="widget_action_failed">Widget action failed: %1$s</string>
+    <string name="widget_no_server">No server configured</string>
     <string name="error_details_title">Error details</string>
     <string name="error_details_exact">Exact error</string>
     <string name="error_details_causes">Possible causes</string>

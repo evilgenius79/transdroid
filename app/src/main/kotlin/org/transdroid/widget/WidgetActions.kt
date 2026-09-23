@@ -17,19 +17,37 @@
 package org.transdroid.widget
 
 import android.content.Context
+import android.util.Log
+import android.widget.Toast
 import androidx.glance.GlanceId
 import androidx.glance.action.ActionParameters
 import androidx.glance.appwidget.action.ActionCallback
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
+import org.transdroid.R
 import org.transdroid.appContainer
+
+private const val TAG = "TransdroidWidget"
 
 val TorrentIdParam = ActionParameters.Key<String>("torrent_id")
 val TorrentPausedParam = ActionParameters.Key<Boolean>("torrent_paused")
 
+/**
+ * Widgets have no room for error banners, so actions confirm receipt with a toast and
+ * report failures the same way instead of silently doing nothing.
+ */
+private suspend fun toast(context: Context, text: String) = withContext(Dispatchers.Main) {
+    Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
+}
+
 /** Refreshes the widget snapshot straight from the active daemon. */
 class RefreshWidgetAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        refreshSnapshot(context)
+        val failure = refreshSnapshot(context)
+        if (failure != null) {
+            toast(context, context.getString(R.string.widget_action_failed, failure))
+        }
     }
 }
 
@@ -39,24 +57,37 @@ class ToggleTorrentAction : ActionCallback {
         val torrentId = parameters[TorrentIdParam] ?: return
         val paused = parameters[TorrentPausedParam] ?: return
         val container = context.appContainer
-        val profile = container.activeProfile.first() ?: return
+        val profile = container.activeProfile.first()
+        if (profile == null) {
+            toast(context, context.getString(R.string.widget_no_server))
+            return
+        }
+        toast(
+            context,
+            context.getString(if (paused) R.string.widget_action_starting else R.string.widget_action_pausing),
+        )
         try {
             val adapter = container.adapterFor(profile)
             if (paused) adapter.start(torrentId) else adapter.pause(torrentId)
         } catch (e: Exception) {
-            // Widget taps have no error surface; the refresh below shows the real state
+            Log.e(TAG, "Widget toggle for $torrentId failed", e)
+            toast(context, context.getString(R.string.widget_action_failed, e.message ?: e.javaClass.simpleName))
         }
         refreshSnapshot(context)
     }
 }
 
-private suspend fun refreshSnapshot(context: Context) {
+/** Returns null on success, or a short failure description. */
+private suspend fun refreshSnapshot(context: Context): String? {
     val container = context.appContainer
-    val profile = container.activeProfile.first() ?: return
-    try {
+    val profile = container.activeProfile.first()
+        ?: return context.getString(R.string.widget_no_data)
+    return try {
         val torrents = container.adapterFor(profile).listTorrents()
         container.widgetStateRepository.update(profile.displayName, torrents)
+        null
     } catch (e: Exception) {
-        // Unreachable server: keep showing the last snapshot rather than blanking out
+        Log.e(TAG, "Widget refresh failed", e)
+        e.message ?: e.javaClass.simpleName
     }
 }
