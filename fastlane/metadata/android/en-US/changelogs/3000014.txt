@@ -1,0 +1,3 @@
+• Fix NetworkOnMainThreadException: larger replies over HTTPS/tunnels
+  (and RSS, search and widget actions) failed because response bodies were
+  read on the main thread; bodies are now fully read on the network thread

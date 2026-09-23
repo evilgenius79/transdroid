@@ -23,17 +23,30 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
+import okhttp3.ResponseBody.Companion.toResponseBody
 import org.transdroid.protocol.DaemonException
 
 /**
  * Executes [request] on the IO dispatcher, translating transport failures to
  * [DaemonException.Connection] and TLS trust failures to [DaemonException.UntrustedServer].
- * The caller owns closing the returned response.
+ *
+ * The returned response's body is fully buffered in memory: callers read it on their own
+ * dispatcher (typically Main), and an OkHttp body that still streams from the socket
+ * would then throw NetworkOnMainThreadException on Android — silently fine on a LAN,
+ * where small replies already sit in the socket buffer, and broken over HTTPS through a
+ * tunnel. The caller still owns closing the returned response.
  */
 internal suspend fun OkHttpClient.executeOnIo(request: Request): Response =
     withContext(Dispatchers.IO) {
         try {
-            newCall(request).execute()
+            val response = newCall(request).execute()
+            val body = response.body ?: return@withContext response
+            val bytes = try {
+                body.bytes()
+            } finally {
+                body.close()
+            }
+            response.newBuilder().body(bytes.toResponseBody(body.contentType())).build()
         } catch (e: SSLException) {
             throw DaemonException.UntrustedServer(
                 "TLS to ${request.url.host}:${request.url.port} failed; the certificate may be self-signed", e,
