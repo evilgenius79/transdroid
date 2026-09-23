@@ -10,69 +10,87 @@ Manage torrents from your Android device.
 > Transdroid 2 code is preserved at the [`transdroid2-final`](../../tree/transdroid2-final)
 > tag and receives no further development.
 
-What has been done so far
-=========================
+Download
+========
+
+Grab the latest APK from [Releases](../../releases/latest) — download **`app-full-debug.apk`**,
+which is signed and installs directly. The optimized `release` APKs are published unsigned
+until release signing keys are configured, and unsigned APKs cannot be installed as-is.
+
+Features
+========
 
 This branch replaces the entire Transdroid 2 code base (Java, Apache HTTP legacy,
-AndroidAnnotations, ORMLite, XML layouts) with a new app built from scratch. Status by
-area:
+AndroidAnnotations, ORMLite, XML layouts) with a new app built from scratch.
 
-* **Project foundations** — new Gradle Kotlin DSL build with a version catalog, minSdk 29
-  / targetSdk 36, the `full`/`lite` product flavor split carried over from v2, and a
-  GitHub Actions CI pipeline that runs all tests and lint on every push and uploads an
-  installable debug APK as a build artifact (see the
-  [Actions tab](../../actions), bottom of the latest run, artifact
-  `transdroid-full-debug`).
-* **Protocol layer** (plan Phases 1 and 4) — a new pure-JVM `:protocol` module defines one
-  normalized `DaemonAdapter` interface plus torrent/file models, with working adapters for
-  **Transmission** (JSON-RPC, 409 session-id handshake, basic auth), **qBittorrent**
-  (Web API v2 cookie auth, compatible with both 4.x `pause/resume` and 5.x `stop/start`
-  endpoints), **rTorrent** (XML-RPC over HTTP with a hardened minimal codec) and
-  **Deluge** (Web UI JSON-RPC with session re-authentication). All protocol behavior is
-  unit-tested against recorded fixture responses; no emulator or real daemon needed.
-* **App UI** (plan Phase 2 + Phase 3) — Jetpack Compose with Material 3 in the classic
-  grey-green Transdroid identity: torrent list with automatic 5-second refresh, status
-  filters and pull-to-refresh; torrent details with start/pause/remove (optionally
-  deleting data) and per-file progress; add-torrent by magnet link or URL, including
-  handling magnet links opened from other apps; server settings with a connection test
-  button. On tablets/foldables the list and details show side by side.
-* **Security** — server credentials are stored AES-256-GCM encrypted using a
-  hardware-backed Android Keystore key and are excluded from cloud backup and device
-  transfer; passwords never leave the device.
-* **Verified** — protocol and app unit tests pass, Android lint is clean, and debug plus
-  minified R8 release builds succeed for both flavors.
+**Torrent management**
 
-* **Search** (plan Phase 5) — in-app torrent search built as an extension point: a
-  `SearchProvider` interface in the protocol module with a **Torznab** implementation, so
-  one Jackett or Prowlarr endpoint unlocks hundreds of indexers. Providers (endpoint +
-  API key) are stored encrypted; results sort by seeders and send straight to the active
-  server. Gated to the `full` flavor via `search_available`.
-* **RSS feeds** — subscribe to torrent RSS/Atom feeds, see new items highlighted, and
-  send entries to your client with one tap. Feed URLs (which often embed private
-  passkeys) live in the same encrypted store as server credentials. `full` flavor only.
-* **Notifications** — an opt-in background check (WorkManager, ~15 min interval) that
-  notifies when torrents finish, with proper Android 13+ notification-permission
-  handling.
-* **Home screen widget** — a Glance widget with the active server's torrent counts and
-  total speeds, refreshed by both foreground use and the background check.
-* **More ways to add** — open or share magnet links, open `.torrent` files from file
-  managers and browsers, pick a `.torrent` file in-app, or paste a URL. Plus torrent
-  list sorting (date added, name, download speed, ratio).
-* **Self-signed HTTPS** — seedboxes and home servers with self-signed certificates are
-  supported securely: the app shows the server's certificate fingerprint and, once
-  accepted, pins exactly that certificate for that server (no "trust everything" toggle).
+* Torrent list with automatic refresh (configurable 3–60 s interval), pull-to-refresh,
+  status filter chips, label/category filter chips, name search, and sorting by date
+  added, name, download speed, upload speed or ratio; total transfer speeds shown in the
+  title bar. On tablets/foldables the list and details show side by side.
+* **Swipe gestures** on torrent rows — swipe right to pause/resume, left to remove (with
+  confirmation); both directions configurable in Settings (pause/resume, remove,
+  re-announce, or nothing).
+* Torrent details with start/pause, remove (optionally deleting data), force
+  **re-announce**, per-file progress and **per-file download priorities** (including
+  skipping files), and **tracker management**: see each tracker with its status and
+  remove trackers right from the app.
+* Add torrents by magnet link, URL, or `.torrent` file — opened from other apps, shared,
+  or picked in-app. Optionally **add paused** so files can be deselected before starting.
+  With a single server configured, adding skips the server-confirmation step. Magnet
+  links show their metadata-fetch progress instead of a blank 0% entry.
+
+**Connectivity**
+
 * **Local network discovery** — adding a server automatically scans your Wi-Fi/Ethernet
   subnet for Transmission, qBittorrent and Deluge daemons and offers what it finds with
   one tap to fill in the connection details.
-* **Labels and file priorities** — labels/categories from all four clients appear as
-  filter chips and in the details view, and per-file download priorities can be changed
-  by tapping a file.
-* **Release pipeline** — tag-triggered GitHub Releases with signed APKs (signing via
-  repository secrets, unsigned fallback), `dependenciesInfo` and VCS metadata stripped
-  from APKs per F-Droid reproducible-build requirements, plus fastlane store metadata.
-* **Contributor docs** (plan Phase 6) — [CONTRIBUTING.md](CONTRIBUTING.md) documents the
-  build, the module layout and the adapter interface as the extension point for adding
-  more torrent clients.
+* **qBittorrent API keys** (qBittorrent 5.2+) — paste a key generated under
+  Options → WebUI → API Key and the app authenticates statelessly with it, no
+  username/password login needed.
+* Works behind reverse proxies and **Cloudflare Tunnel**: custom HTTP headers per server
+  (e.g. Cloudflare Access service tokens), automatic port switching when toggling HTTPS,
+  and a connection-help dialog covering LAN, domain/tunnel, portal and self-signed setups.
+* **Self-signed HTTPS** done securely: the app shows the server's certificate fingerprint
+  and, once accepted, pins exactly that certificate for that server (no "trust
+  everything" toggle).
+* **Error details** — tap any connection error (or test a connection in server settings)
+  to see the exact underlying error, HTTP status codes included, with likely causes
+  matched to it.
+
+**Around the app**
+
+* **Home screen widgets** (Glance) — a compact widget with torrent counts and total
+  speeds, and an interactive list widget with per-torrent progress, speeds, ETA and
+  **play/pause buttons that control torrents without opening the app**; both have manual
+  refresh.
+* **Search** — in-app torrent search via **Torznab** (Jackett/Prowlarr), so one endpoint
+  unlocks hundreds of indexers; results sort by seeders and send straight to the active
+  server. `full` flavor only.
+* **RSS feeds** — subscribe to torrent RSS/Atom feeds, see new items highlighted, and
+  send entries to your client with one tap. `full` flavor only.
+* **Notifications** — an opt-in background check (~15 min interval) that notifies when
+  torrents finish, with Android 13+ notification-permission handling.
+* **Theme** — the classic grey-green Transdroid identity in light and dark; follow the
+  system setting or force light/dark in Settings.
+* **Settings backup** — export servers, feeds and search indexers to a
+  passphrase-encrypted file (PBKDF2 + AES-GCM) and restore after a reinstall or on
+  another device.
+
+**Security & engineering**
+
+* Server credentials, API keys, feed URLs and indexer keys are stored AES-256-GCM
+  encrypted with a hardware-backed Android Keystore key and excluded from cloud backup;
+  passwords never leave the device.
+* A pure-JVM `:protocol` module with one normalized `DaemonAdapter` interface and
+  adapters for **Transmission** (JSON-RPC, 409 session-id handshake), **qBittorrent**
+  (Web API v2, 4.x and 5.x endpoint names, API keys), **rTorrent** (XML-RPC with a
+  hardened minimal codec) and **Deluge** (Web UI JSON-RPC) — all unit-tested against
+  recorded fixture responses, no emulator needed.
+* CI on every push (tests, lint, R8 release builds, installable debug APK artifact),
+  tag-triggered GitHub Releases, F-Droid-ready reproducible-build settings and fastlane
+  metadata. [CONTRIBUTING.md](CONTRIBUTING.md) documents how to add more client adapters.
 
 Not yet done: F-Droid inclusion (metadata is ready; store screenshots and the fdroiddata
 merge request remain), translations, and the remaining Transdroid 2 client adapters. See
@@ -101,7 +119,7 @@ Supported clients
 | Client | Status |
 | --- | --- |
 | Transmission | ✅ Supported (RPC over JSON, session-id handshake, basic auth) |
-| qBittorrent | ✅ Supported (Web API v2, works with qBittorrent 4.1+ and 5.x) |
+| qBittorrent | ✅ Supported (Web API v2, works with qBittorrent 4.1+ and 5.x; API keys on 5.2+) |
 | rTorrent | ✅ Supported (XML-RPC over HTTP, e.g. /RPC2 behind a web server or ruTorrent) |
 | Deluge | ✅ Supported (Web UI JSON-RPC, Deluge 1.3 and 2.x) |
 
