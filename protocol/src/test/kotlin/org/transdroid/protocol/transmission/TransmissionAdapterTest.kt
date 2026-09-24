@@ -89,7 +89,7 @@ class TransmissionAdapterTest {
 
         assertEquals(5, torrents.size)
         val downloading = torrents[0]
-        assertEquals("1", downloading.id)
+        assertEquals("info hash, not the session-scoped numeric id", "8c212779b4abde7c6bc608063a0d008b7e40ce32", downloading.id)
         assertEquals("ubuntu-24.04.2-desktop-amd64.iso", downloading.name)
         assertEquals(TorrentStatus.DOWNLOADING, downloading.status)
         assertEquals(0.4266f, downloading.progress, 0.0001f)
@@ -145,8 +145,61 @@ class TransmissionAdapterTest {
 
         val body = server.takeRequest().body.readUtf8()
         assertTrue(body.contains("\"method\":\"torrent-add\""))
-        assertTrue(body.contains("magnet:?xt=urn:btih:abcdef"))
+        assertTrue("magnets/URLs go under the 'filename' argument", body.contains("\"filename\":\"magnet:?xt=urn:btih:abcdef\""))
         assertTrue("not paused unless requested", !body.contains("\"paused\""))
+    }
+
+    @Test
+    fun `add by file sends base64 metainfo`() = runTest {
+        server.enqueue(MockResponse().setBody("""{"result":"success","arguments":{}}"""))
+
+        adapter.addByFile("a.torrent", byteArrayOf(0x64, 0x38, 0x3A), startPaused = true)
+
+        val body = server.takeRequest().body.readUtf8()
+        assertTrue(body.contains("\"metainfo\":\"ZDg6\""))
+        assertTrue(body.contains("\"paused\":true"))
+    }
+
+    @Test
+    fun `actions address torrents by info hash`() = runTest {
+        server.enqueue(MockResponse().setBody("""{"result":"success","arguments":{}}"""))
+
+        adapter.pause("8c212779b4abde7c6bc608063a0d008b7e40ce32")
+
+        val body = server.takeRequest().body.readUtf8()
+        assertTrue(body.contains("\"ids\":[\"8c212779b4abde7c6bc608063a0d008b7e40ce32\"]"))
+    }
+
+    @Test
+    fun `403 is explained as an rpc-whitelist rejection, not a bad password`() = runTest {
+        server.enqueue(MockResponse().setResponseCode(403).setBody("<p>Unauthorized IP Address.</p>"))
+
+        try {
+            adapter.listTorrents()
+            fail("Expected DaemonException.Authentication")
+        } catch (expected: DaemonException.Authentication) {
+            assertTrue(expected.message!!.contains("rpc-whitelist"))
+        }
+    }
+
+    @Test
+    fun `basic auth encodes the password as UTF-8`() = runTest {
+        val utf8Adapter = TransmissionAdapter(
+            DaemonConfig(
+                type = DaemonType.TRANSMISSION,
+                host = server.hostName,
+                port = server.port,
+                username = "user",
+                password = "pässwörd",
+            ),
+            OkHttpClient(),
+        )
+        server.enqueue(MockResponse().setBody("""{"result":"success","arguments":{"version":"4.0.5"}}"""))
+
+        utf8Adapter.testConnection()
+
+        val expected = "Basic " + java.util.Base64.getEncoder().encodeToString("user:pässwörd".toByteArray(Charsets.UTF_8))
+        assertEquals(expected, server.takeRequest().getHeader("Authorization"))
     }
 
     @Test

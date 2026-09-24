@@ -27,8 +27,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import org.transdroid.protocol.discovery.DaemonProbe
@@ -46,18 +44,21 @@ class LanDiscovery(private val context: Context) {
         .readTimeout(2, TimeUnit.SECONDS)
         .build()
 
+    /**
+     * The blocking connect sweep runs on its own bounded pool: on Dispatchers.IO (64
+     * threads) 700+ queued connects would starve every other IO user — polls, DataStore,
+     * saves — for the whole scan.
+     */
+    private val sweepDispatcher = Dispatchers.IO.limitedParallelism(CONCURRENT_SOCKETS)
+
     /** Empty when not on a local network (cellular/VPN-only) or nothing was found. */
-    suspend fun scan(): List<DiscoveredDaemon> = withContext(Dispatchers.IO) {
-        val prefix = localSubnetPrefix() ?: return@withContext emptyList()
-        val concurrency = Semaphore(CONCURRENT_SOCKETS)
+    suspend fun scan(): List<DiscoveredDaemon> = withContext(sweepDispatcher) {
+        val subnet = localSubnet() ?: return@withContext emptyList()
         coroutineScope {
-            (1..254).flatMap { hostIndex ->
+            subnet.hosts.flatMap { host ->
                 DaemonProbe.DEFAULT_PORTS.map { port ->
                     async {
-                        concurrency.withPermit {
-                            val host = "$prefix$hostIndex"
-                            if (isPortOpen(host, port)) DaemonProbe.probe(probeClient, host, port) else null
-                        }
+                        if (isPortOpen(host, port)) DaemonProbe.probe(probeClient, host, port) else null
                     }
                 }
             }.awaitAll().filterNotNull().distinctBy { it.host to it.port }.sortedBy { it.host }
@@ -73,24 +74,42 @@ class LanDiscovery(private val context: Context) {
         false
     }
 
-    /** The /24 prefix ("192.168.1.") of the current Wi-Fi/Ethernet IPv4 address, if any. */
-    private fun localSubnetPrefix(): String? {
+    private class Subnet(val hosts: List<String>)
+
+    /**
+     * The hosts to sweep on the current Wi-Fi/Ethernet link, honoring its prefix length:
+     * at most the /24 around the device (bigger subnets are capped to keep the sweep
+     * quick), and only the addresses actually inside a smaller subnet.
+     */
+    private fun localSubnet(): Subnet? {
         val connectivity = context.getSystemService(ConnectivityManager::class.java) ?: return null
         val network = connectivity.activeNetwork ?: return null
         val capabilities = connectivity.getNetworkCapabilities(network) ?: return null
+        // A VPN mixes its underlying transports into its capabilities; sweeping the
+        // tunnel's address space would probe the wrong network entirely
+        if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) return null
         val local = capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
             capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
         if (!local) return null
-        val address = connectivity.getLinkProperties(network)?.linkAddresses
-            ?.map { it.address }
-            ?.firstOrNull { it is Inet4Address && !it.isLoopbackAddress }
+        val link = connectivity.getLinkProperties(network)?.linkAddresses
+            ?.firstOrNull { it.address is Inet4Address && !it.address.isLoopbackAddress }
             ?: return null
-        val bytes = address.address
-        return "${bytes[0].toUByte()}.${bytes[1].toUByte()}.${bytes[2].toUByte()}."
+        val bytes = link.address.address.map { it.toUByte().toInt() }
+        val prefixLength = link.prefixLength.coerceIn(MIN_SWEEP_PREFIX, 30)
+        val hostBits = 32 - prefixLength
+        val addressInt = (bytes[0] shl 24) or (bytes[1] shl 16) or (bytes[2] shl 8) or bytes[3]
+        val networkInt = addressInt and (-1 shl hostBits)
+        val broadcastInt = networkInt or ((1 shl hostBits) - 1)
+        val hosts = ((networkInt + 1) until broadcastInt).map { host ->
+            "${(host ushr 24) and 0xFF}.${(host ushr 16) and 0xFF}.${(host ushr 8) and 0xFF}.${host and 0xFF}"
+        }
+        return Subnet(hosts)
     }
 
     private companion object {
         const val CONNECT_TIMEOUT_MS = 300
-        const val CONCURRENT_SOCKETS = 96
+        const val CONCURRENT_SOCKETS = 48
+        /** Never sweep more than a /24 (254 hosts × 3 ports) regardless of the real subnet. */
+        const val MIN_SWEEP_PREFIX = 24
     }
 }

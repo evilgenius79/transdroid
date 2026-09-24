@@ -212,10 +212,10 @@ class TransmissionAdapter(
         }
     }
 
+    /** Transmission accepts either its session-scoped numeric id or the persistent info hash. */
     private fun kotlinx.serialization.json.JsonObjectBuilder.putIds(torrentId: String) {
-        val id = torrentId.toIntOrNull()
-            ?: throw DaemonException.UnexpectedResponse("Not a Transmission torrent id: $torrentId")
-        put("ids", buildJsonArray { add(id) })
+        val numeric = torrentId.toIntOrNull()
+        put("ids", buildJsonArray { if (numeric != null) add(numeric) else add(torrentId) })
     }
 
     /** Sends one RPC request, retrying once after a 409 session-id challenge. */
@@ -236,8 +236,14 @@ class TransmissionAdapter(
         }
         response.use {
             when {
-                it.code == 401 || it.code == 403 ->
+                it.code == 401 ->
                     throw DaemonException.Authentication("Transmission rejected the username/password")
+                // Transmission answers 403 only for an address outside rpc-whitelist
+                it.code == 403 ->
+                    throw DaemonException.Authentication(
+                        "Transmission refuses this device's IP address — add it to rpc-whitelist " +
+                            "(or disable rpc-whitelist-enabled) in the daemon's settings.json"
+                    )
                 !it.isSuccessful ->
                     throw DaemonException.UnexpectedResponse("Transmission returned HTTP ${it.code}")
             }
@@ -270,7 +276,8 @@ class TransmissionAdapter(
         sessionId?.let { builder.header(SESSION_ID_HEADER, it) }
         val username = config.username
         if (!username.isNullOrEmpty()) {
-            builder.header("Authorization", Credentials.basic(username, config.password.orEmpty()))
+            // Transmission compares the raw UTF-8 password bytes; OkHttp defaults to Latin-1
+            builder.header("Authorization", Credentials.basic(username, config.password.orEmpty(), Charsets.UTF_8))
         }
         return httpClient.executeOnIo(builder.build())
     }
@@ -295,7 +302,10 @@ class TransmissionAdapter(
         }
         val eta = obj["eta"]?.jsonPrimitive?.long?.takeIf { it >= 0 }
         return Torrent(
-            id = obj["id"]?.jsonPrimitive?.contentOrNull
+            // The numeric id is renumbered whenever the daemon restarts; the info hash is
+            // stable, so it is what widgets and the finished-torrent check remember
+            id = obj["hashString"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+                ?: obj["id"]?.jsonPrimitive?.contentOrNull
                 ?: throw DaemonException.UnexpectedResponse("Torrent without id"),
             name = obj["name"]?.jsonPrimitive?.contentOrNull ?: "",
             status = status,
@@ -327,7 +337,7 @@ class TransmissionAdapter(
         const val SESSION_ID_HEADER = "X-Transmission-Session-Id"
 
         val TORRENT_FIELDS = listOf(
-            "id", "name", "status", "percentDone", "rateDownload", "rateUpload", "eta",
+            "id", "hashString", "name", "status", "percentDone", "rateDownload", "rateUpload", "eta",
             "sizeWhenDone", "haveValid", "haveUnchecked", "uploadedEver", "uploadRatio",
             "peersConnected", "addedDate", "downloadDir", "error", "errorString", "labels",
             "metadataPercentComplete",

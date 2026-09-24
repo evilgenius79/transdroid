@@ -16,19 +16,60 @@
  */
 package org.transdroid.protocol.internal
 
-import java.io.StringReader
+import java.io.ByteArrayInputStream
 import javax.xml.parsers.DocumentBuilderFactory
 import org.w3c.dom.Document
 import org.w3c.dom.Element
 import org.w3c.dom.Node
-import org.xml.sax.InputSource
 
-/** Parses XML from an untrusted server with DTDs disabled, ruling out XXE. */
-internal fun parseXmlSafely(xml: String): Document =
-    DocumentBuilderFactory.newInstance().apply {
-        setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
+/**
+ * Parser features that rule out XXE where the platform parser supports them. Xerces (the
+ * JVM) knows the apache.org names; Android's built-in parser throws for anything but the
+ * sax.org basics, so each is applied best-effort and [rejectDtd] is the real guarantee.
+ */
+private val HARDENING_FEATURES = listOf(
+    "http://apache.org/xml/features/disallow-doctype-decl" to true,
+    "http://xml.org/sax/features/external-general-entities" to false,
+    "http://xml.org/sax/features/external-parameter-entities" to false,
+    "http://apache.org/xml/features/nonvalidating/load-external-dtd" to false,
+)
+
+/**
+ * Parses XML from an untrusted server. Any document carrying a DTD is refused outright:
+ * none of the XML this app consumes (XML-RPC, RSS/Atom, Torznab) legitimately needs one,
+ * and refusing it works identically on every parser implementation.
+ */
+internal fun parseXmlSafely(xml: String): Document = parseXmlSafely(xml.toByteArray(Charsets.UTF_8))
+
+/** Parses raw bytes, so the document's own encoding declaration is honored. */
+internal fun parseXmlSafely(bytes: ByteArray): Document {
+    rejectDtd(bytes)
+    val factory = DocumentBuilderFactory.newInstance().apply {
         isExpandEntityReferences = false
-    }.newDocumentBuilder().parse(InputSource(StringReader(xml)))
+        HARDENING_FEATURES.forEach { (name, value) ->
+            try {
+                setFeature(name, value)
+            } catch (e: Exception) {
+                // Feature unknown to this parser implementation
+            }
+        }
+        try {
+            isXIncludeAware = false
+        } catch (e: UnsupportedOperationException) {
+            // Android's factory does not implement XInclude at all
+        }
+    }
+    return factory.newDocumentBuilder().parse(ByteArrayInputStream(bytes))
+}
+
+private fun rejectDtd(bytes: ByteArray) {
+    // Scan as Latin-1 so the check is byte-exact regardless of the declared encoding;
+    // the markers are pure ASCII in every ASCII-compatible encoding
+    val text = String(bytes, Charsets.ISO_8859_1)
+    if (text.contains("<!DOCTYPE", ignoreCase = true) || text.contains("<!ENTITY", ignoreCase = true)) {
+        throw IllegalArgumentException("XML documents with a DTD are not accepted")
+    }
+}
 
 internal fun Element.childElements(): List<Element> {
     val result = mutableListOf<Element>()

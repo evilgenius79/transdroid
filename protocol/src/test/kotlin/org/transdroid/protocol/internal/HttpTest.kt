@@ -17,6 +17,10 @@
 package org.transdroid.protocol.internal
 
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -78,6 +82,44 @@ class HttpTest {
             assertEquals("abc", it.header("X-Transmission-Session-Id"))
             assertEquals("", it.body?.string())
         }
+    }
+
+    @Test
+    fun `oversized replies are refused instead of buffered`() = runTest {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setBody("x".repeat(10_000)))
+        server.start()
+
+        try {
+            OkHttpClient().executeOnIo(Request.Builder().url(server.url("/")).build(), maxBytes = 4_096)
+            fail("Expected DaemonException.UnexpectedResponse")
+        } catch (expected: DaemonException.UnexpectedResponse) {
+            assertTrue(expected.message!!.contains("more than"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `cancelling the caller cancels the http call promptly`() = runBlocking {
+        val server = MockWebServer()
+        // Would take ~20 s on its own: 100 KB trickled at 1 KB per 200 ms
+        server.enqueue(
+            MockResponse().setBody("x".repeat(100_000)).throttleBody(1_024, 200, TimeUnit.MILLISECONDS)
+        )
+        server.start()
+
+        val started = System.nanoTime()
+        val job = launch(Dispatchers.Default) {
+            OkHttpClient().executeOnIo(Request.Builder().url(server.url("/")).build())
+        }
+        delay(500)
+        job.cancel()
+        job.join()
+        val elapsedMillis = (System.nanoTime() - started) / 1_000_000
+
+        assertTrue("call must end well before the body would finish (took ${elapsedMillis}ms)", elapsedMillis < 5_000)
+        server.shutdown()
     }
 
     @Test

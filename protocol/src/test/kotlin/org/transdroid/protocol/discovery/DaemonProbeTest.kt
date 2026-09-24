@@ -68,10 +68,10 @@ class DaemonProbeTest {
     }
 
     @Test
-    fun `recognizes qbittorrent by its version endpoint`() = runTest {
+    fun `recognizes qbittorrent by its login endpoint reply`() = runTest {
         dispatch { request ->
             when (request.path) {
-                "/api/v2/app/webapiVersion" -> MockResponse().setBody("2.11.2")
+                "/api/v2/auth/login" -> MockResponse().setBody("Fails.")
                 else -> MockResponse().setResponseCode(404)
             }
         }
@@ -79,6 +79,28 @@ class DaemonProbeTest {
         val found = DaemonProbe.probe(client, server.hostName, server.port)
 
         assertEquals(DaemonType.QBITTORRENT, found?.type)
+    }
+
+    @Test
+    fun `a proxy answering 403 everywhere is not qbittorrent`() = runTest {
+        dispatch { MockResponse().setResponseCode(403).setBody("Forbidden") }
+
+        assertNull(DaemonProbe.probe(client, server.hostName, server.port))
+    }
+
+    @Test
+    fun `a generic 401 is not transmission but its own realm is`() = runTest {
+        dispatch { MockResponse().setResponseCode(401).setHeader("WWW-Authenticate", "Basic realm=\"nginx\"") }
+        assertNull(DaemonProbe.probe(client, server.hostName, server.port))
+
+        dispatch { request ->
+            if (request.path == "/transmission/rpc") {
+                MockResponse().setResponseCode(401).setHeader("WWW-Authenticate", "Basic realm=\"Transmission\"")
+            } else {
+                MockResponse().setResponseCode(404)
+            }
+        }
+        assertEquals(DaemonType.TRANSMISSION, DaemonProbe.probe(client, server.hostName, server.port)?.type)
     }
 
     @Test

@@ -70,12 +70,31 @@ class DelugeAdapter(
     @Volatile
     private var requestId: Long = 0
 
+    /** Null until first needed; Deluge 1.3 uses a different file-priority scale than 2.x. */
+    @Volatile
+    private var legacyPriorities: Boolean? = null
+
     override suspend fun testConnection(): String {
         ensureAuthenticated()
-        // daemon.info exists on Deluge 1.3, daemon.get_version on 2.x; either may be absent
-        val version = tryVersionCall("daemon.info") ?: tryVersionCall("daemon.get_version")
+        // The web UI answers even with no daemon behind it; that state is a setup problem
+        // the user must fix in Deluge's connection manager, so say so instead of "OK"
+        val connected = try {
+            call("web.connected").jsonPrimitive.booleanOrNull
+        } catch (e: DaemonException.UnexpectedResponse) {
+            null
+        }
+        if (connected == false) {
+            throw DaemonException.UnexpectedResponse(
+                "Deluge's web interface is not connected to its daemon — open the Deluge web UI and pick the daemon in its connection manager"
+            )
+        }
+        val version = fetchVersion()
         return if (version == null) "Deluge" else "Deluge $version"
     }
+
+    /** daemon.info exists on Deluge 1.3, daemon.get_version on 2.x; either may be absent. */
+    private suspend fun fetchVersion(): String? =
+        tryVersionCall("daemon.get_version") ?: tryVersionCall("daemon.info")
 
     private suspend fun tryVersionCall(method: String): String? = try {
         call(method).jsonPrimitive.contentOrNull
@@ -83,6 +102,34 @@ class DelugeAdapter(
         null
     } catch (e: IllegalArgumentException) {
         null
+    }
+
+    /**
+     * Deluge 1.3 files use 0 skip / 1 normal / 2 high / 5 highest; 2.x uses 0 skip /
+     * 1-3 low / 4 normal / 5-7 high. Decided once from the daemon version (1.3 when the
+     * version cannot be read, since 2.x always answers daemon.get_version).
+     */
+    private suspend fun usesLegacyPriorities(): Boolean {
+        legacyPriorities?.let { return it }
+        val version = fetchVersion()
+        val legacy = version == null || version.trim().startsWith("1.")
+        legacyPriorities = legacy
+        return legacy
+    }
+
+    private fun decodePriority(value: Int, legacy: Boolean): FilePriority = when {
+        value == 0 -> FilePriority.OFF
+        legacy -> if (value >= 2) FilePriority.HIGH else FilePriority.NORMAL
+        value <= 3 -> FilePriority.LOW
+        value >= 5 -> FilePriority.HIGH
+        else -> FilePriority.NORMAL
+    }
+
+    private fun encodePriority(priority: FilePriority, legacy: Boolean): Int = when (priority) {
+        FilePriority.OFF -> 0
+        FilePriority.LOW -> if (legacy) 1 else 1
+        FilePriority.NORMAL -> if (legacy) 1 else 4
+        FilePriority.HIGH -> if (legacy) 2 else 7
     }
 
     override suspend fun listTorrents(): List<Torrent> {
@@ -204,22 +251,20 @@ class DelugeAdapter(
         val files = obj["files"]?.jsonArray ?: return emptyList()
         val progress = obj["file_progress"]?.jsonArray
         val priorities = obj["file_priorities"]?.jsonArray
+        val legacy = usesLegacyPriorities()
         return files.mapIndexed { listIndex, element ->
             val file = element.jsonObject
             val size = file["size"]?.jsonPrimitive?.doubleOrNull?.toLong() ?: 0L
             val index = file["index"]?.jsonPrimitive?.doubleOrNull?.toInt() ?: listIndex
             val fileProgress = progress?.getOrNull(listIndex)?.jsonPrimitive?.floatOrNull ?: 0f
+            val rawPriority = priorities?.getOrNull(index)?.jsonPrimitive?.doubleOrNull?.toInt()
+                ?: if (legacy) 1 else 4
             TorrentFile(
                 index = index,
                 path = file["path"]?.jsonPrimitive?.contentOrNull ?: "",
                 sizeBytes = size,
                 downloadedBytes = (size * fileProgress).toLong(),
-                priority = when (priorities?.getOrNull(index)?.jsonPrimitive?.doubleOrNull?.toInt() ?: 4) {
-                    0 -> FilePriority.OFF
-                    1 -> FilePriority.LOW
-                    7 -> FilePriority.HIGH
-                    else -> FilePriority.NORMAL
-                },
+                priority = decodePriority(rawPriority, legacy),
             )
         }
     }
@@ -232,19 +277,14 @@ class DelugeAdapter(
             torrentId,
             buildJsonArray { add("file_priorities") },
         ) as? JsonObject ?: throw DaemonException.UnexpectedResponse("Unexpected file_priorities reply")
+        val legacy = usesLegacyPriorities()
         val current = status["file_priorities"]?.jsonArray
-            ?.map { it.jsonPrimitive.doubleOrNull?.toInt() ?: 4 }
+            ?.map { it.jsonPrimitive.doubleOrNull?.toInt() ?: if (legacy) 1 else 4 }
             ?: throw DaemonException.UnexpectedResponse("Deluge did not report file priorities")
         if (fileIndex !in current.indices) {
             throw DaemonException.UnexpectedResponse("File index $fileIndex out of range")
         }
-        val value = when (priority) {
-            FilePriority.OFF -> 0
-            FilePriority.LOW -> 1
-            FilePriority.HIGH -> 7
-            else -> 4
-        }
-        val updated = current.toMutableList().also { it[fileIndex] = value }
+        val updated = current.toMutableList().also { it[fileIndex] = encodePriority(priority, legacy) }
         call(
             "core.set_torrent_options",
             buildJsonArray { add(torrentId) },

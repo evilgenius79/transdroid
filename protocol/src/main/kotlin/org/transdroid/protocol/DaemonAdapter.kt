@@ -17,7 +17,10 @@
 package org.transdroid.protocol
 
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
+import okhttp3.Request
 import org.transdroid.protocol.deluge.DelugeAdapter
 import org.transdroid.protocol.qbittorrent.QbittorrentAdapter
 import org.transdroid.protocol.rtorrent.RtorrentAdapter
@@ -89,17 +92,59 @@ object DaemonAdapterFactory {
             ?: httpClient
         if (config.customHeaders.isNotEmpty()) {
             client = client.newBuilder().addInterceptor { chain ->
-                val request = chain.request().newBuilder().apply {
-                    config.customHeaders.forEach { (name, value) -> header(name, value) }
-                }.build()
-                chain.proceed(request)
+                chain.proceed(withCustomHeaders(chain.request(), config.customHeaders))
             }.build()
         }
-        return when (config.type) {
+        val adapter = when (config.type) {
             DaemonType.TRANSMISSION -> TransmissionAdapter(config, client)
             DaemonType.QBITTORRENT -> QbittorrentAdapter(config, client)
             DaemonType.RTORRENT -> RtorrentAdapter(config, client)
             DaemonType.DELUGE -> DelugeAdapter(config, client)
         }
+        return BackgroundDispatchingAdapter(adapter)
     }
+
+    /**
+     * Custom headers never clobber what the adapter itself set: an adapter's session
+     * cookie or Authorization must survive, so a same-named Cookie is appended to it and
+     * any other header the adapter already sent is left alone.
+     */
+    internal fun withCustomHeaders(request: Request, custom: Map<String, String>): Request {
+        val builder = request.newBuilder()
+        custom.forEach { (name, value) ->
+            val existing = request.header(name)
+            when {
+                existing == null -> builder.header(name, value)
+                name.equals("Cookie", ignoreCase = true) -> builder.header(name, "$existing; $value")
+                else -> Unit
+            }
+        }
+        return builder.build()
+    }
+}
+
+/**
+ * Runs every adapter call on the IO dispatcher. The adapters only move the socket work
+ * off the caller's thread themselves; decoding and mapping a multi-megabyte torrent list
+ * would otherwise run on whatever dispatcher called them — the main thread, for the UI.
+ */
+private class BackgroundDispatchingAdapter(private val delegate: DaemonAdapter) : DaemonAdapter {
+    override val config: DaemonConfig get() = delegate.config
+
+    override suspend fun testConnection(): String = io { testConnection() }
+    override suspend fun listTorrents(): List<Torrent> = io { listTorrents() }
+    override suspend fun addByUrl(url: String, startPaused: Boolean) = io { addByUrl(url, startPaused) }
+    override suspend fun addByFile(fileName: String, contents: ByteArray, startPaused: Boolean) =
+        io { addByFile(fileName, contents, startPaused) }
+    override suspend fun start(torrentId: String) = io { start(torrentId) }
+    override suspend fun pause(torrentId: String) = io { pause(torrentId) }
+    override suspend fun remove(torrentId: String, deleteData: Boolean) = io { remove(torrentId, deleteData) }
+    override suspend fun listFiles(torrentId: String): List<TorrentFile> = io { listFiles(torrentId) }
+    override suspend fun setFilePriority(torrentId: String, fileIndex: Int, priority: FilePriority) =
+        io { setFilePriority(torrentId, fileIndex, priority) }
+    override suspend fun forceReannounce(torrentId: String) = io { forceReannounce(torrentId) }
+    override suspend fun listTrackers(torrentId: String): List<TrackerInfo> = io { listTrackers(torrentId) }
+    override suspend fun removeTracker(torrentId: String, tracker: TrackerInfo) = io { removeTracker(torrentId, tracker) }
+
+    private suspend fun <T> io(block: suspend DaemonAdapter.() -> T): T = withContext(Dispatchers.IO) { delegate.block() }
 }

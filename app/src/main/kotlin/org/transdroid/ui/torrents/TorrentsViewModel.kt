@@ -118,9 +118,16 @@ data class TorrentsUiState(
     val trackers: Map<String, List<TrackerInfo>> = emptyMap(),
     val swipeRightAction: SwipeAction = SwipeAction.PAUSE_RESUME,
     val swipeLeftAction: SwipeAction = SwipeAction.REMOVE,
+    /**
+     * Failure of an explicit user action (pause, remove, priority…). Kept apart from
+     * [error] because the poll loop clears that one on its next success, which would
+     * erase an action failure before the user could see it.
+     */
+    val actionError: UiError? = null,
 ) {
-    val availableLabels: List<String>
-        get() = torrents.flatMap { it.labels }.distinct().sorted()
+    // Derived once per state instance rather than on every read: composition reads
+    // these several times per frame and the list can hold thousands of torrents
+    val availableLabels: List<String> by lazy { torrents.flatMap { it.labels }.distinct().sorted() }
 
     val totalDownloadRate: Long
         get() = torrents.sumOf { it.downloadRate }
@@ -128,14 +135,16 @@ data class TorrentsUiState(
     val totalUploadRate: Long
         get() = torrents.sumOf { it.uploadRate }
 
-    val visibleTorrents: List<Torrent>
-        get() = torrents
+    val visibleTorrents: List<Torrent> by lazy {
+        val query = nameFilter.trim()
+        torrents
             .filter {
                 filter.matches(it) &&
                     (labelFilter == null || labelFilter in it.labels) &&
-                    (nameFilter.isBlank() || it.name.contains(nameFilter.trim(), ignoreCase = true))
+                    (query.isEmpty() || it.name.contains(query, ignoreCase = true))
             }
-            .sortedWith(sort.comparator().thenBy { it.name.lowercase() })
+            .sortedWith(sort.comparator().thenBy(String.CASE_INSENSITIVE_ORDER) { it.name })
+    }
 
     val selectedTorrent: Torrent?
         get() = torrents.firstOrNull { it.id == selectedTorrentId }
@@ -153,15 +162,23 @@ class TorrentsViewModel(private val container: AppContainer) : ViewModel() {
             }.collect { (profile, count) ->
                 _ui.update { state ->
                     val switched = profile?.id != state.activeProfile?.id
-                    state.copy(
-                        activeProfile = profile,
-                        profilesLoaded = true,
-                        profileCount = count,
-                        torrents = if (switched) emptyList() else state.torrents,
-                        hasLoaded = if (switched) false else state.hasLoaded,
-                        files = if (switched) emptyMap() else state.files,
-                        error = if (switched) null else state.error,
-                    )
+                    if (!switched) {
+                        state.copy(activeProfile = profile, profilesLoaded = true, profileCount = count)
+                    } else {
+                        // Nothing loaded for the previous server may survive the switch
+                        state.copy(
+                            activeProfile = profile,
+                            profilesLoaded = true,
+                            profileCount = count,
+                            torrents = emptyList(),
+                            hasLoaded = false,
+                            files = emptyMap(),
+                            trackers = emptyMap(),
+                            selectedTorrentId = null,
+                            error = null,
+                            actionError = null,
+                        )
+                    }
                 }
                 if (profile != null) refresh(showSpinner = false)
             }
@@ -193,10 +210,10 @@ class TorrentsViewModel(private val container: AppContainer) : ViewModel() {
         if (showSpinner) _ui.update { it.copy(refreshing = true) }
         try {
             val torrents = container.adapterFor(profile).listTorrents()
-            _ui.update {
-                if (it.activeProfile?.id != profile.id) it
-                else it.copy(torrents = torrents, hasLoaded = true, refreshing = false, error = null)
-            }
+            // A late result from a server the user already switched away from is stale
+            // for the list and for the widget alike
+            if (_ui.value.activeProfile?.id != profile.id) return
+            _ui.update { it.copy(torrents = torrents, hasLoaded = true, refreshing = false, error = null) }
             container.widgetStateRepository.update(profile.displayName, torrents)
         } catch (e: CancellationException) {
             throw e
@@ -232,22 +249,29 @@ class TorrentsViewModel(private val container: AppContainer) : ViewModel() {
                 val adapter = container.adapterFor(profile)
                 adapter.setFilePriority(torrentId, file.index, priority)
                 val files = adapter.listFiles(torrentId)
-                _ui.update { it.copy(files = it.files + (torrentId to files)) }
+                _ui.update {
+                    if (it.activeProfile?.id != profile.id) it else it.copy(files = it.files + (torrentId to files))
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _ui.update { it.copy(error = e.toUiError(profile.host)) }
+                _ui.update { it.copy(actionError = e.toUiError(profile.host)) }
             }
         }
+    }
+
+    fun clearActionError() {
+        _ui.update { it.copy(actionError = null) }
     }
 
     fun select(torrentId: String?) {
         _ui.update { it.copy(selectedTorrentId = torrentId) }
     }
 
+    /** Start when stopped — including errored torrents, which every client leaves stopped. */
     fun toggleStartPause(torrent: Torrent) {
         runAction { adapter ->
-            if (torrent.status == TorrentStatus.PAUSED) adapter.start(torrent.id) else adapter.pause(torrent.id)
+            if (torrent.status.isStopped) adapter.start(torrent.id) else adapter.pause(torrent.id)
         }
     }
 
@@ -260,7 +284,9 @@ class TorrentsViewModel(private val container: AppContainer) : ViewModel() {
         viewModelScope.launch {
             try {
                 val trackers = container.adapterFor(profile).listTrackers(torrentId)
-                _ui.update { it.copy(trackers = it.trackers + (torrentId to trackers)) }
+                _ui.update {
+                    if (it.activeProfile?.id != profile.id) it else it.copy(trackers = it.trackers + (torrentId to trackers))
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -276,11 +302,13 @@ class TorrentsViewModel(private val container: AppContainer) : ViewModel() {
                 val adapter = container.adapterFor(profile)
                 adapter.removeTracker(torrentId, tracker)
                 val trackers = adapter.listTrackers(torrentId)
-                _ui.update { it.copy(trackers = it.trackers + (torrentId to trackers)) }
+                _ui.update {
+                    if (it.activeProfile?.id != profile.id) it else it.copy(trackers = it.trackers + (torrentId to trackers))
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _ui.update { it.copy(error = e.toUiError(profile.host)) }
+                _ui.update { it.copy(actionError = e.toUiError(profile.host)) }
             }
         }
     }
@@ -294,7 +322,9 @@ class TorrentsViewModel(private val container: AppContainer) : ViewModel() {
         viewModelScope.launch {
             try {
                 val files = container.adapterFor(profile).listFiles(torrentId)
-                _ui.update { it.copy(files = it.files + (torrentId to files)) }
+                _ui.update {
+                    if (it.activeProfile?.id != profile.id) it else it.copy(files = it.files + (torrentId to files))
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -344,7 +374,7 @@ class TorrentsViewModel(private val container: AppContainer) : ViewModel() {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _ui.update { it.copy(error = e.toUiError(profile.host)) }
+                _ui.update { it.copy(actionError = e.toUiError(profile.host)) }
             }
         }
     }

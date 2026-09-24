@@ -50,6 +50,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -71,9 +72,10 @@ fun RssFeedsScreen(
     onOpenFeed: (String) -> Unit,
     onBack: () -> Unit,
 ) {
-    val feeds by viewModel.feeds.collectAsStateWithLifecycle()
-    var editingFeed by remember { mutableStateOf<RssFeed?>(null) }
-    var showAddDialog by remember { mutableStateOf(false) }
+    val loadedFeeds by viewModel.feeds.collectAsStateWithLifecycle()
+    val feeds = loadedFeeds.orEmpty()
+    var deletingFeedId by rememberSaveable { mutableStateOf<String?>(null) }
+    var showAddDialog by rememberSaveable { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -96,7 +98,9 @@ fun RssFeedsScreen(
         },
     ) { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
-            if (feeds.isEmpty()) {
+            if (loadedFeeds == null) {
+                CircularProgressIndicator(Modifier.align(Alignment.Center))
+            } else if (feeds.isEmpty()) {
                 Text(
                     stringResource(R.string.rss_empty),
                     style = MaterialTheme.typography.bodyLarge,
@@ -119,7 +123,7 @@ fun RssFeedsScreen(
                                 )
                             },
                             trailingContent = {
-                                IconButton(onClick = { editingFeed = feed }) {
+                                IconButton(onClick = { deletingFeedId = feed.id }) {
                                     Icon(
                                         Icons.Default.Delete,
                                         contentDescription = stringResource(R.string.rss_delete_feed),
@@ -144,19 +148,19 @@ fun RssFeedsScreen(
         )
     }
 
-    editingFeed?.let { feed ->
+    feeds.firstOrNull { it.id == deletingFeedId }?.let { feed ->
         AlertDialog(
-            onDismissRequest = { editingFeed = null },
+            onDismissRequest = { deletingFeedId = null },
             title = { Text(stringResource(R.string.rss_delete_feed)) },
             text = { Text(feed.displayName) },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.deleteFeed(feed.id)
-                    editingFeed = null
+                    deletingFeedId = null
                 }) { Text(stringResource(R.string.details_remove_confirm)) }
             },
             dismissButton = {
-                TextButton(onClick = { editingFeed = null }) { Text(stringResource(R.string.details_cancel)) }
+                TextButton(onClick = { deletingFeedId = null }) { Text(stringResource(R.string.details_cancel)) }
             },
         )
     }
@@ -164,8 +168,8 @@ fun RssFeedsScreen(
 
 @Composable
 private fun EditFeedDialog(onDismiss: () -> Unit, onSave: (name: String, url: String) -> Unit) {
-    var name by remember { mutableStateOf("") }
-    var url by remember { mutableStateOf("") }
+    var name by rememberSaveable { mutableStateOf("") }
+    var url by rememberSaveable { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.rss_add_feed)) },
@@ -218,8 +222,9 @@ fun RssItemsScreen(
     LaunchedEffect(addedMessage, addErrorMessage) {
         val message = addedMessage ?: addErrorMessage
         if (message != null) {
-            snackbarHostState.showSnackbar(message)
+            // Clear first: leaving mid-snackbar must not replay it on the next visit
             viewModel.clearAddResult()
+            snackbarHostState.showSnackbar(message)
         }
     }
 

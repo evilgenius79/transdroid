@@ -103,13 +103,34 @@ class QbittorrentAdapterTest {
     }
 
     @Test
-    fun `rejected login maps to authentication error`() = runTest {
+    fun `rejected login maps to authentication error and is not retried on the next poll`() = runTest {
         server.enqueue(MockResponse().setBody("Fails."))
+        val shared = adapter()
+
+        try {
+            shared.listTorrents()
+            fail("Expected DaemonException.Authentication")
+        } catch (expected: DaemonException.Authentication) {
+        }
+        try {
+            shared.listTorrents()
+            fail("Expected DaemonException.Authentication")
+        } catch (expected: DaemonException.Authentication) {
+        }
+
+        assertEquals("re-sending bad credentials every poll gets the address banned", 1, server.requestCount)
+    }
+
+    @Test
+    fun `401 is explained as a host header rejection`() = runTest {
+        server.enqueue(loginOk())
+        server.enqueue(MockResponse().setResponseCode(401))
 
         try {
             adapter().listTorrents()
             fail("Expected DaemonException.Authentication")
         } catch (expected: DaemonException.Authentication) {
+            assertTrue(expected.message!!.contains("Host header"))
         }
     }
 

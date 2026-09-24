@@ -90,25 +90,67 @@ fun EditServerScreen(
     val discovery by viewModel.discovery.collectAsStateWithLifecycle()
     val existing = profiles.firstOrNull { it.id == serverId }
 
-    var name by rememberSaveable(existing?.id) { mutableStateOf(existing?.name.orEmpty()) }
-    var type by rememberSaveable(existing?.id) { mutableStateOf(existing?.type ?: DaemonType.TRANSMISSION) }
-    var host by rememberSaveable(existing?.id) { mutableStateOf(existing?.host.orEmpty()) }
-    var port by rememberSaveable(existing?.id) {
-        mutableStateOf((existing?.port ?: DaemonType.TRANSMISSION.defaultPort).toString())
-    }
-    var useSsl by rememberSaveable(existing?.id) { mutableStateOf(existing?.useSsl ?: false) }
-    var path by rememberSaveable(existing?.id) { mutableStateOf(existing?.path.orEmpty()) }
-    var username by rememberSaveable(existing?.id) { mutableStateOf(existing?.username.orEmpty()) }
-    var password by rememberSaveable(existing?.id) { mutableStateOf(existing?.password.orEmpty()) }
-    var apiKey by rememberSaveable(existing?.id) { mutableStateOf(existing?.apiKey.orEmpty()) }
-    var pinnedCert by rememberSaveable(existing?.id) { mutableStateOf(existing?.pinnedCertSha256.orEmpty()) }
-    var customHeaders by rememberSaveable(existing?.id) { mutableStateOf(existing?.customHeaders.orEmpty()) }
+    // Keyed on the nav argument, which is stable across recreation. The profiles flow
+    // emits after first composition, so the form is filled from `existing` exactly once
+    // (tracked by a saveable flag) and never again — otherwise the store's late emission
+    // after process death would wipe whatever the user had typed.
+    var name by rememberSaveable(serverId) { mutableStateOf("") }
+    var type by rememberSaveable(serverId) { mutableStateOf(DaemonType.TRANSMISSION) }
+    var host by rememberSaveable(serverId) { mutableStateOf("") }
+    var port by rememberSaveable(serverId) { mutableStateOf(DaemonType.TRANSMISSION.defaultPort.toString()) }
+    var useSsl by rememberSaveable(serverId) { mutableStateOf(false) }
+    var path by rememberSaveable(serverId) { mutableStateOf("") }
+    var username by rememberSaveable(serverId) { mutableStateOf("") }
+    var password by rememberSaveable(serverId) { mutableStateOf("") }
+    var apiKey by rememberSaveable(serverId) { mutableStateOf("") }
+    var pinnedCert by rememberSaveable(serverId) { mutableStateOf("") }
+    var customHeaders by rememberSaveable(serverId) { mutableStateOf("") }
+    var formFilled by rememberSaveable(serverId) { mutableStateOf(serverId == null) }
     var hostError by remember { mutableStateOf(false) }
     var portError by remember { mutableStateOf(false) }
     var showHelp by remember { mutableStateOf(false) }
+    var showDeleteDialog by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(existing?.id, formFilled) {
+        val profile = existing ?: return@LaunchedEffect
+        if (formFilled) return@LaunchedEffect
+        name = profile.name
+        type = profile.type
+        host = profile.host
+        port = profile.port.toString()
+        useSsl = profile.useSsl
+        path = profile.path
+        username = profile.username
+        password = profile.password
+        apiKey = profile.apiKey
+        pinnedCert = profile.pinnedCertSha256
+        customHeaders = profile.customHeaders
+        formFilled = true
+    }
 
     DisposableEffect(Unit) {
-        onDispose { viewModel.resetTestState() }
+        onDispose {
+            viewModel.resetTestState()
+            viewModel.stopLanScan()
+        }
+    }
+
+    if (showDeleteDialog && existing != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text(stringResource(R.string.settings_delete_server_title)) },
+            text = { Text(stringResource(R.string.settings_delete_server_message, existing.displayName)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDeleteDialog = false
+                    viewModel.delete(existing.id)
+                    onBack()
+                }) { Text(stringResource(R.string.details_remove_confirm)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) { Text(stringResource(R.string.details_cancel)) }
+            },
+        )
     }
 
     if (showHelp) {
@@ -179,10 +221,7 @@ fun EditServerScreen(
                         )
                     }
                     if (existing != null) {
-                        IconButton(onClick = {
-                            viewModel.delete(existing.id)
-                            onBack()
-                        }) {
+                        IconButton(onClick = { showDeleteDialog = true }) {
                             Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.settings_delete))
                         }
                     }

@@ -18,6 +18,8 @@ package org.transdroid.widget
 
 import android.content.Context
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.ColorFilter
@@ -56,17 +58,24 @@ import org.transdroid.util.formatSpeed
 class TransdroidWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val state = context.appContainer.widgetStateRepository.current()
+        refreshSnapshotIfStale(context, STALE_AFTER_MILLIS)
+        val repository = context.appContainer.widgetStateRepository
+        val initial = repository.current()
         val strings = WidgetStrings(
             appName = context.getString(R.string.app_name),
             noData = context.getString(R.string.widget_no_data),
             refresh = context.getString(R.string.torrents_refresh),
         )
         provideContent {
+            val state by repository.state.collectAsState(initial)
             GlanceTheme {
                 WidgetContent(state, strings)
             }
         }
+    }
+
+    private companion object {
+        const val STALE_AFTER_MILLIS = 10L * 60 * 1000
     }
 
     private data class WidgetStrings(val appName: String, val noData: String, val refresh: String)

@@ -51,6 +51,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -208,9 +209,13 @@ fun AddTorrentScreen(
                     Text(stringResource(R.string.add_pick_file))
                 }
             } else {
+                // Resolving the name is a cross-process provider query; never in composition
+                val fileName by produceState(initialValue = "", pickedFile) {
+                    value = withContext(Dispatchers.IO) { displayName(context, Uri.parse(pickedFile)) }
+                }
                 AssistChip(
                     onClick = {},
-                    label = { Text(displayName(context, Uri.parse(pickedFile))) },
+                    label = { Text(fileName) },
                     trailingIcon = {
                         IconButton(onClick = { fileUri = null }) {
                             Icon(Icons.Default.Close, contentDescription = stringResource(R.string.details_cancel))

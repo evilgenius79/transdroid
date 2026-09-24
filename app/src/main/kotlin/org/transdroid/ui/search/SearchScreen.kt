@@ -71,7 +71,7 @@ fun SearchScreen(
     onBack: () -> Unit,
 ) {
     val ui by viewModel.ui.collectAsStateWithLifecycle()
-    val providers by viewModel.providers.collectAsStateWithLifecycle()
+    val loadedProviders by viewModel.providers.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     var confirmResult by remember { mutableStateOf<SearchResult?>(null) }
 
@@ -80,8 +80,9 @@ fun SearchScreen(
     LaunchedEffect(addedMessage, addErrorMessage) {
         val message = addedMessage ?: addErrorMessage
         if (message != null) {
-            snackbarHostState.showSnackbar(message)
+            // Clear first: leaving mid-snackbar must not replay it on the next visit
             viewModel.clearAddResult()
+            snackbarHostState.showSnackbar(message)
         }
     }
 
@@ -102,6 +103,11 @@ fun SearchScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
+            val providers = loadedProviders
+            if (providers == null) {
+                Box(Modifier.fillMaxSize()) { CircularProgressIndicator(Modifier.align(Alignment.Center)) }
+                return@Column
+            }
             if (providers.isEmpty()) {
                 Box(Modifier.fillMaxSize()) {
                     Text(

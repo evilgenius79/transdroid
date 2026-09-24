@@ -74,6 +74,11 @@
     <string name="sort_ratio">Ratio</string>
     <string name="swipe_action_none">Nothing</string>
     <string name="swipe_action_pause_resume">Pause / resume</string>
+    <string name="settings_write_failed">Could not save settings: %1$s</string>
+    <string name="settings_delete_server_title">Delete this server?</string>
+    <string name="settings_delete_server_message">%1$s and its saved credentials will be removed from this device.</string>
+    <string name="details_action_failed">Action failed: %1$s</string>
+    <string name="details_dismiss">Dismiss</string>
     <string name="settings_interface">Interface</string>
     <string name="settings_theme">Theme</string>
     <string name="settings_theme_system">Follow system</string>

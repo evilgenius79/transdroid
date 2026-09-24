@@ -77,6 +77,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -85,10 +86,7 @@ import androidx.compose.ui.res.booleanResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.repeatOnLifecycle
 import org.transdroid.R
 import org.transdroid.data.SwipeAction
 import org.transdroid.protocol.Torrent
@@ -118,14 +116,6 @@ fun TorrentsScreen(
     val ui by viewModel.ui.collectAsStateWithLifecycle()
     val rssAvailable = booleanResource(R.bool.rss_available)
     val searchAvailable = booleanResource(R.bool.search_available)
-
-    // Poll the daemon while this screen is started; stops automatically when backgrounded
-    val lifecycleOwner = LocalLifecycleOwner.current
-    LaunchedEffect(lifecycleOwner) {
-        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-            viewModel.pollLoop()
-        }
-    }
 
     Scaffold(
         topBar = {
@@ -221,6 +211,9 @@ private fun TorrentListContent(
         ui.error?.let { error ->
             ErrorBanner(error = error, onRetry = { viewModel.refresh() })
         }
+        ui.actionError?.let { error ->
+            ActionErrorBanner(error = error, onDismiss = { viewModel.clearActionError() })
+        }
         var showNameFilter by remember { mutableStateOf(ui.nameFilter.isNotBlank()) }
         Row(
             Modifier
@@ -306,13 +299,16 @@ private fun TorrentListContent(
                     )
                 }
             } else {
-                var pendingRemove by remember { mutableStateOf<Torrent?>(null) }
+                // Saveable by id so the confirmation survives rotation; resolved against
+                // the live list so a torrent removed elsewhere just closes the dialog
+                var pendingRemoveId by rememberSaveable { mutableStateOf<String?>(null) }
+                val pendingRemove = pendingRemoveId?.let { id -> ui.torrents.firstOrNull { it.id == id } }
                 val onSwipeAction: (SwipeAction, Torrent) -> Unit = { action, torrent ->
                     when (action) {
                         SwipeAction.NONE -> {}
                         SwipeAction.PAUSE_RESUME -> viewModel.toggleStartPause(torrent)
                         SwipeAction.REANNOUNCE -> viewModel.forceReannounce(torrent)
-                        SwipeAction.REMOVE -> pendingRemove = torrent
+                        SwipeAction.REMOVE -> pendingRemoveId = torrent.id
                     }
                 }
                 LazyColumn(
@@ -334,9 +330,9 @@ private fun TorrentListContent(
                 pendingRemove?.let { torrent ->
                     RemoveTorrentDialog(
                         torrent = torrent,
-                        onDismiss = { pendingRemove = null },
+                        onDismiss = { pendingRemoveId = null },
                         onConfirm = { alsoDeleteData ->
-                            pendingRemove = null
+                            pendingRemoveId = null
                             viewModel.remove(torrent, alsoDeleteData)
                         },
                     )
@@ -362,12 +358,19 @@ private fun SwipeableTorrentCard(
     val currentRight by rememberUpdatedState(rightAction)
     val currentLeft by rememberUpdatedState(leftAction)
     val currentOnSwipeAction by rememberUpdatedState(onSwipeAction)
+    // material3 consults confirmValueChange both when the drag crosses the anchor and
+    // again when the release settles, so one full swipe would otherwise fire twice
+    val lastFiredAt = remember { longArrayOf(0L) }
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { value ->
-            when (value) {
-                SwipeToDismissBoxValue.StartToEnd -> currentOnSwipeAction(currentRight, currentTorrent)
-                SwipeToDismissBoxValue.EndToStart -> currentOnSwipeAction(currentLeft, currentTorrent)
-                SwipeToDismissBoxValue.Settled -> {}
+            val now = System.currentTimeMillis()
+            if (value != SwipeToDismissBoxValue.Settled && now - lastFiredAt[0] > SWIPE_DEBOUNCE_MILLIS) {
+                lastFiredAt[0] = now
+                when (value) {
+                    SwipeToDismissBoxValue.StartToEnd -> currentOnSwipeAction(currentRight, currentTorrent)
+                    SwipeToDismissBoxValue.EndToStart -> currentOnSwipeAction(currentLeft, currentTorrent)
+                    SwipeToDismissBoxValue.Settled -> {}
+                }
             }
             // Always snap back; the action's outcome shows through the next refresh
             // (removal asks for confirmation first), never by dismissing the card
@@ -429,6 +432,36 @@ private fun SwipeActionBackground(
             tint = tint,
             modifier = Modifier.padding(horizontal = 24.dp),
         )
+    }
+}
+
+private const val SWIPE_DEBOUNCE_MILLIS = 600L
+
+/** A dismissable card for a failed user action; shared by the list and details screens. */
+@Composable
+fun ActionErrorBanner(error: UiError, onDismiss: () -> Unit) {
+    var showDetails by remember { mutableStateOf(false) }
+    Card(
+        onClick = { showDetails = true },
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+    ) {
+        Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                stringResource(R.string.details_action_failed, error.message()),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.details_dismiss))
+            }
+        }
+    }
+    if (showDetails) {
+        ErrorDetailsDialog(error = error, onDismiss = { showDetails = false })
     }
 }
 

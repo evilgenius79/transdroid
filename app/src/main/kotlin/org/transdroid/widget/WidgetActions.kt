@@ -77,6 +77,16 @@ class ToggleTorrentAction : ActionCallback {
     }
 }
 
+/**
+ * Refreshes the snapshot when it is older than [maxAgeMillis]; used from the widgets'
+ * periodic system update so the home screen stays current even when the app is never
+ * opened and finished-notifications (the only other background fetch) are off.
+ */
+internal suspend fun refreshSnapshotIfStale(context: Context, maxAgeMillis: Long) {
+    val updatedAt = context.appContainer.widgetStateRepository.current().updatedAtMillis ?: 0L
+    if (System.currentTimeMillis() - updatedAt > maxAgeMillis) refreshSnapshot(context)
+}
+
 /** Returns null on success, or a short failure description. */
 private suspend fun refreshSnapshot(context: Context): String? {
     val container = context.appContainer

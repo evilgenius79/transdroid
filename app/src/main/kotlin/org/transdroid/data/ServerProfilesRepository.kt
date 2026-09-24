@@ -29,7 +29,6 @@ import java.io.OutputStream
 import javax.crypto.AEADBadTagException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.retryWhen
@@ -49,23 +48,29 @@ class ServerProfilesRepository(context: Context, cipher: ProfilesCipher = Keysto
     )
 
     /**
-     * The store's data, retrying briefly when the Keystore is transiently unavailable.
-     * If it stays broken past the retries, fall back to an empty view instead of letting
-     * the exception crash every collector — the data on disk is untouched and reappears
-     * once the Keystore recovers (typically next app start).
+     * The store's data, retrying with backoff for as long as the Keystore is unavailable
+     * (Android is known to fail it right after unlock or under system pressure). After a
+     * few failures an empty view is emitted so the UI is not stuck on a spinner — but the
+     * retries never stop, so the real data reappears as soon as the Keystore recovers
+     * without needing an app restart. A `catch { emit(...) }` would instead end the flow
+     * for good on the first sustained failure, freezing every collector at "no servers".
      */
     private val data: Flow<ProfilesData> = dataStore.data
         .retryWhen { cause, attempt ->
-            (cause is IOException && attempt < 3).also { retrying -> if (retrying) delay(250 * (attempt + 1)) }
-        }
-        .catch { cause ->
-            if (cause is IOException) emit(ProfilesData()) else throw cause
+            if (cause !is IOException) return@retryWhen false
+            if (attempt == FAILURES_BEFORE_EMPTY_VIEW) emit(ProfilesData())
+            delay(RETRY_BASE_DELAY_MILLIS * minOf(attempt + 1, MAX_RETRY_BACKOFF_STEPS))
+            true
         }
 
     val profiles: Flow<List<ServerProfile>> = data.map { it.profiles }
 
-    /** A snapshot of everything in the store, for backup export. */
-    suspend fun currentData(): ProfilesData = data.first()
+    /**
+     * A snapshot of everything in the store, for backup export. Reads the store directly
+     * and fails loudly: a backup written from the empty fallback view would look like a
+     * successful export while containing nothing.
+     */
+    suspend fun currentData(): ProfilesData = dataStore.data.first()
 
     /** Replaces the entire store with restored backup contents. */
     suspend fun replaceData(newData: ProfilesData) {
@@ -144,6 +149,9 @@ class ServerProfilesRepository(context: Context, cipher: ProfilesCipher = Keysto
     private companion object {
         // Referenced in data_extraction_rules.xml / full_backup_content.xml
         const val FILE_NAME = "server_profiles.bin"
+        const val FAILURES_BEFORE_EMPTY_VIEW = 3L
+        const val RETRY_BASE_DELAY_MILLIS = 500L
+        const val MAX_RETRY_BACKOFF_STEPS = 8L
     }
 }
 

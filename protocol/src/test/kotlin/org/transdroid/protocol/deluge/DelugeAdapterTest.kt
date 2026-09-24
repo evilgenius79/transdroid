@@ -30,6 +30,7 @@ import org.junit.Test
 import org.transdroid.protocol.DaemonConfig
 import org.transdroid.protocol.DaemonException
 import org.transdroid.protocol.DaemonType
+import org.transdroid.protocol.FilePriority
 import org.transdroid.protocol.TorrentStatus
 import org.transdroid.protocol.TrackerInfo
 
@@ -166,6 +167,47 @@ class DelugeAdapterTest {
         val remove = server.takeRequest().body.readUtf8()
         assertTrue(remove.contains("\"method\":\"core.remove_torrent\""))
         assertTrue(remove.contains("[\"abcdef\",true]"))
+    }
+
+    @Test
+    fun `deluge 1_3 file priorities use the legacy scale`() = runTest {
+        server.enqueue(loginOk())
+        server.enqueue(
+            MockResponse().setBody(
+                """{"result": {"files": [{"index": 0, "path": "a", "size": 10}, {"index": 1, "path": "b", "size": 10},
+                    {"index": 2, "path": "c", "size": 10}], "file_progress": [1, 0, 0],
+                    "file_priorities": [1, 2, 0]}, "error": null, "id": 2}"""
+            )
+        )
+        // usesLegacyPriorities: get_version unknown on 1.3, daemon.info answers
+        server.enqueue(MockResponse().setBody("""{"result": null, "error": {"message": "Unknown method", "code": 2}, "id": 3}"""))
+        server.enqueue(MockResponse().setBody("""{"result": "1.3.15", "error": null, "id": 4}"""))
+
+        val files = adapter.listFiles("abc")
+
+        assertEquals("1 is Normal on 1.3, not Low", FilePriority.NORMAL, files[0].priority)
+        assertEquals("2 is High on 1.3", FilePriority.HIGH, files[1].priority)
+        assertEquals(FilePriority.OFF, files[2].priority)
+
+        // Writing NORMAL must send 1 on 1.3 (4 would read as High there)
+        server.enqueue(MockResponse().setBody("""{"result": {"file_priorities": [1, 2, 0]}, "error": null, "id": 5}"""))
+        server.enqueue(MockResponse().setBody("""{"result": null, "error": null, "id": 6}"""))
+        adapter.setFilePriority("abc", 1, FilePriority.NORMAL)
+        repeat(5) { server.takeRequest() }
+        assertTrue(server.takeRequest().body.readUtf8().contains("\"file_priorities\":[1,1,0]"))
+    }
+
+    @Test
+    fun `test connection fails when the web ui has no daemon`() = runTest {
+        server.enqueue(loginOk())
+        server.enqueue(MockResponse().setBody("""{"result": false, "error": null, "id": 2}"""))
+
+        try {
+            adapter.testConnection()
+            fail("Expected DaemonException.UnexpectedResponse")
+        } catch (expected: DaemonException.UnexpectedResponse) {
+            assertTrue(expected.message!!.contains("not connected to its daemon"))
+        }
     }
 
     @Test

@@ -29,6 +29,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import org.transdroid.data.ThemeMode
 import org.transdroid.ui.TransdroidApp
 import org.transdroid.ui.theme.TransdroidTheme
@@ -48,9 +51,14 @@ class MainActivity : ComponentActivity() {
         } else {
             savedInstanceState.getString(STATE_PENDING_TORRENT_URL)
         }
+        // A synchronous first read (bounded, a few ms from disk) so the first frame is
+        // already in the chosen theme instead of flashing the system one
+        val initialThemeMode = runBlocking {
+            withTimeoutOrNull(THEME_READ_TIMEOUT_MILLIS) { appContainer.settingsRepository.themeMode.first() }
+        } ?: ThemeMode.SYSTEM
         setContent {
             val themeMode by appContainer.settingsRepository.themeMode
-                .collectAsStateWithLifecycle(initialValue = ThemeMode.SYSTEM)
+                .collectAsStateWithLifecycle(initialValue = initialThemeMode)
             TransdroidTheme(
                 darkTheme = when (themeMode) {
                     ThemeMode.SYSTEM -> isSystemInDarkTheme()
@@ -79,17 +87,24 @@ class MainActivity : ComponentActivity() {
     }
 
     /** Pulls a magnet link, torrent URL or .torrent content URI out of VIEW/SEND intents. */
-    private fun extractTorrentUrl(intent: Intent?): String? = when (intent?.action) {
-        Intent.ACTION_VIEW -> intent.dataString?.takeIf {
-            it.startsWith("magnet:") || it.startsWith("content:") || it.startsWith("file:")
+    private fun extractTorrentUrl(intent: Intent?): String? {
+        // A task relaunched from Recents replays its original intent; the torrent it
+        // carried was already offered once
+        if (intent == null || intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return null
+        return when (intent.action) {
+            Intent.ACTION_VIEW -> intent.dataString?.takeIf {
+                it.startsWith("magnet:") || it.startsWith("content:") || it.startsWith("file:")
+            }
+            // Shared text is commonly "Title\nhttps://…"; take the first link wherever it sits
+            Intent.ACTION_SEND -> intent.getStringExtra(Intent.EXTRA_TEXT)
+                ?.let { LINK_PATTERN.find(it)?.value }
+            else -> null
         }
-        Intent.ACTION_SEND -> intent.getStringExtra(Intent.EXTRA_TEXT)?.trim()?.takeIf {
-            it.startsWith("magnet:") || it.startsWith("http://") || it.startsWith("https://")
-        }
-        else -> null
     }
 
     private companion object {
         const val STATE_PENDING_TORRENT_URL = "pending_torrent_url"
+        const val THEME_READ_TIMEOUT_MILLIS = 250L
+        val LINK_PATTERN = Regex("""(magnet:\?[^\s]+|https?://[^\s]+)""")
     }
 }

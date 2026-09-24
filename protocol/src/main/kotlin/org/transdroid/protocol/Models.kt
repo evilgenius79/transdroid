@@ -57,7 +57,11 @@ data class DaemonConfig(
     val customHeaders: Map<String, String> = emptyMap(),
 ) {
     val baseUrl: String
-        get() = (if (useSsl) "https" else "http") + "://" + host + ":" + port
+        get() {
+            // A bare IPv6 literal must be bracketed to be a valid URL authority
+            val authorityHost = if (host.contains(':') && !host.startsWith("[")) "[$host]" else host
+            return (if (useSsl) "https" else "http") + "://" + authorityHost + ":" + port
+        }
 }
 
 enum class TorrentStatus {
@@ -71,6 +75,10 @@ enum class TorrentStatus {
 
     val isActive: Boolean
         get() = this == DOWNLOADING || this == SEEDING
+
+    /** Paused, or errored — every supported client stops a torrent it flags with an error. */
+    val isStopped: Boolean
+        get() = this == PAUSED || this == ERROR
 }
 
 /** One torrent as reported by a daemon, normalized across client types. */

@@ -16,6 +16,8 @@
  */
 package org.transdroid.protocol.search
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -69,12 +71,14 @@ class TorznabProvider(
                 !response.isSuccessful ->
                     throw DaemonException.UnexpectedResponse("The indexer returned HTTP ${response.code}")
             }
-            response.body?.string().orEmpty()
+            response.body?.bytes() ?: ByteArray(0)
         }
-        return parse(body)
+        return withContext(Dispatchers.Default) { parse(body) }
     }
 
-    internal fun parse(xml: String): List<SearchResult> {
+    internal fun parse(xml: String): List<SearchResult> = parse(xml.toByteArray(Charsets.UTF_8))
+
+    internal fun parse(xml: ByteArray): List<SearchResult> {
         val root = try {
             parseXmlSafely(xml).documentElement
         } catch (e: Exception) {

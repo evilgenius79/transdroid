@@ -61,6 +61,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -68,6 +69,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.booleanResource
 import androidx.compose.ui.res.stringResource
@@ -79,13 +81,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
-import androidx.compose.ui.graphics.vector.ImageVector
 import org.transdroid.BuildConfig
 import org.transdroid.R
 import org.transdroid.data.SearchProviderConfig
 import org.transdroid.data.SettingsRepository
 import org.transdroid.data.SwipeAction
 import org.transdroid.data.ThemeMode
+import org.transdroid.ui.message
 import org.transdroid.ui.torrents.label
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -99,23 +101,28 @@ fun SettingsScreen(
     val activeId by viewModel.activeServerId.collectAsStateWithLifecycle()
     val providers by viewModel.searchProviders.collectAsStateWithLifecycle()
     val notifyFinished by viewModel.notifyFinished.collectAsStateWithLifecycle()
+    val backupState by viewModel.backupState.collectAsStateWithLifecycle()
+    val restoreResult by viewModel.restoreResult.collectAsStateWithLifecycle()
+    val writeError by viewModel.writeError.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val searchAvailable = booleanResource(R.bool.search_available)
 
-    var editingProvider by remember { mutableStateOf<SearchProviderConfig?>(null) }
-    var showProviderDialog by remember { mutableStateOf(false) }
+    // All dialog state is saveable: rotating (or a picker recreating the activity) must
+    // not silently drop a half-filled dialog or the file the user just picked
+    var editingProviderId by rememberSaveable { mutableStateOf<String?>(null) }
+    var showProviderDialog by rememberSaveable { mutableStateOf(false) }
+    var showExportDialog by rememberSaveable { mutableStateOf(false) }
+    var importUri by rememberSaveable { mutableStateOf<Uri?>(null) }
+    var pendingBackup by rememberSaveable { mutableStateOf<ByteArray?>(null) }
 
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
-    var showExportDialog by remember { mutableStateOf(false) }
-    // Saveable: the document picker can recreate the activity before delivering the uri
-    var pendingBackup by rememberSaveable { mutableStateOf<ByteArray?>(null) }
-    var importUri by remember { mutableStateOf<Uri?>(null) }
     val exportWrittenMessage = stringResource(R.string.backup_export_done)
     val exportFailedMessage = stringResource(R.string.backup_export_failed)
     val restoreWrongPassphrase = stringResource(R.string.backup_wrong_passphrase)
     val restoreInvalid = stringResource(R.string.backup_invalid_file)
     val restoredTemplate = stringResource(R.string.backup_restored)
+    val writeFailedTemplate = stringResource(R.string.settings_write_failed)
 
     val exportCreator = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream")
@@ -133,6 +140,43 @@ fun SettingsScreen(
                 }
                 snackbarHostState.showSnackbar(if (ok) exportWrittenMessage else exportFailedMessage)
             }
+        }
+    }
+
+    // The encrypted bytes arrive as ViewModel state, so a recreation during key
+    // derivation still ends in exactly one picker launch from a live launcher
+    LaunchedEffect(backupState) {
+        when (val state = backupState) {
+            is SettingsViewModel.BackupState.Ready -> {
+                pendingBackup = state.bytes
+                viewModel.consumeBackup()
+                exportCreator.launch("transdroid-backup.tdbk")
+            }
+            SettingsViewModel.BackupState.Failed -> {
+                viewModel.consumeBackup()
+                snackbarHostState.showSnackbar(exportFailedMessage)
+            }
+            else -> {}
+        }
+    }
+
+    LaunchedEffect(restoreResult) {
+        val result = restoreResult ?: return@LaunchedEffect
+        viewModel.consumeRestoreResult()
+        snackbarHostState.showSnackbar(
+            when (result) {
+                is SettingsViewModel.RestoreResult.Success -> String.format(restoredTemplate, result.serverCount)
+                SettingsViewModel.RestoreResult.WrongPassphrase -> restoreWrongPassphrase
+                SettingsViewModel.RestoreResult.InvalidFile -> restoreInvalid
+            }
+        )
+    }
+
+    val writeErrorMessage = writeError?.message()
+    LaunchedEffect(writeErrorMessage) {
+        if (writeErrorMessage != null) {
+            viewModel.clearWriteError()
+            snackbarHostState.showSnackbar(String.format(writeFailedTemplate, writeErrorMessage))
         }
     }
 
@@ -195,27 +239,15 @@ fun SettingsScreen(
 
             item {
                 val pollInterval by viewModel.pollIntervalSeconds.collectAsStateWithLifecycle()
-                var intervalMenuOpen by remember { mutableStateOf(false) }
-                ListItem(
-                    headlineContent = { Text(stringResource(R.string.settings_poll_interval)) },
-                    supportingContent = { Text(stringResource(R.string.settings_poll_interval_value, pollInterval)) },
-                    leadingContent = {
-                        Icon(Icons.Default.Refresh, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                    },
-                    modifier = Modifier.fillMaxWidth().clickable { intervalMenuOpen = true },
+                OptionPickerItem(
+                    title = stringResource(R.string.settings_poll_interval),
+                    valueText = stringResource(R.string.settings_poll_interval_value, pollInterval),
+                    icon = Icons.Default.Refresh,
+                    options = SettingsRepository.POLL_INTERVAL_OPTIONS,
+                    selected = pollInterval,
+                    optionLabel = { stringResource(R.string.settings_poll_interval_value, it) },
+                    onSelect = { viewModel.setPollInterval(it) },
                 )
-                DropdownMenu(expanded = intervalMenuOpen, onDismissRequest = { intervalMenuOpen = false }) {
-                    SettingsRepository.POLL_INTERVAL_OPTIONS.forEach { seconds ->
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.settings_poll_interval_value, seconds)) },
-                            leadingIcon = { RadioButton(selected = seconds == pollInterval, onClick = null) },
-                            onClick = {
-                                viewModel.setPollInterval(seconds)
-                                intervalMenuOpen = false
-                            },
-                        )
-                    }
-                }
             }
 
             item { SectionHeader(stringResource(R.string.settings_interface)) }
@@ -297,7 +329,7 @@ fun SettingsScreen(
                             )
                         },
                         modifier = Modifier.fillMaxWidth().clickable {
-                            editingProvider = provider
+                            editingProviderId = provider.id
                             showProviderDialog = true
                         },
                     )
@@ -305,7 +337,7 @@ fun SettingsScreen(
                 item {
                     TextButton(
                         onClick = {
-                            editingProvider = null
+                            editingProviderId = null
                             showProviderDialog = true
                         },
                         modifier = Modifier.padding(horizontal = 8.dp),
@@ -363,10 +395,7 @@ fun SettingsScreen(
             onDismiss = { showExportDialog = false },
             onConfirm = { passphrase ->
                 showExportDialog = false
-                viewModel.createBackup(passphrase) { bytes ->
-                    pendingBackup = bytes
-                    exportCreator.launch("transdroid-backup.tdbk")
-                }
+                viewModel.createBackup(passphrase)
             },
         )
     }
@@ -380,28 +409,11 @@ fun SettingsScreen(
             onConfirm = { passphrase ->
                 importUri = null
                 scope.launch {
-                    val bytes = withContext(Dispatchers.IO) {
-                        try {
-                            context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                        } catch (e: Exception) {
-                            null
-                        }
-                    }
-                    if (bytes == null || bytes.size > MAX_BACKUP_BYTES) {
+                    val bytes = withContext(Dispatchers.IO) { readBackupFile(context, uri) }
+                    if (bytes == null) {
                         snackbarHostState.showSnackbar(restoreInvalid)
-                        return@launch
-                    }
-                    viewModel.restoreBackup(bytes, passphrase) { result ->
-                        scope.launch {
-                            snackbarHostState.showSnackbar(
-                                when (result) {
-                                    is SettingsViewModel.RestoreResult.Success ->
-                                        String.format(restoredTemplate, result.serverCount)
-                                    SettingsViewModel.RestoreResult.WrongPassphrase -> restoreWrongPassphrase
-                                    SettingsViewModel.RestoreResult.InvalidFile -> restoreInvalid
-                                }
-                            )
-                        }
+                    } else {
+                        viewModel.restoreBackup(bytes, passphrase)
                     }
                 }
             },
@@ -409,6 +421,7 @@ fun SettingsScreen(
     }
 
     if (showProviderDialog) {
+        val editingProvider = providers.firstOrNull { it.id == editingProviderId }
         SearchProviderDialog(
             existing = editingProvider,
             onDismiss = { showProviderDialog = false },
@@ -428,6 +441,28 @@ fun SettingsScreen(
 
 private const val MAX_BACKUP_BYTES = 10 * 1024 * 1024
 
+/**
+ * Reads a picked backup, refusing anything over [MAX_BACKUP_BYTES] *before* it is held in
+ * memory — the picker accepts any file, and a mis-picked video must not be an OOM crash.
+ */
+private fun readBackupFile(context: android.content.Context, uri: Uri): ByteArray? = try {
+    context.contentResolver.openInputStream(uri)?.use { stream ->
+        val output = java.io.ByteArrayOutputStream()
+        val buffer = ByteArray(64 * 1024)
+        var total = 0
+        while (true) {
+            val read = stream.read(buffer)
+            if (read < 0) break
+            total += read
+            if (total > MAX_BACKUP_BYTES) return null
+            output.write(buffer, 0, read)
+        }
+        output.toByteArray().takeIf { it.isNotEmpty() }
+    }
+} catch (e: Exception) {
+    null
+}
+
 @Composable
 private fun PassphraseDialog(
     title: String,
@@ -436,7 +471,7 @@ private fun PassphraseDialog(
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
 ) {
-    var passphrase by remember { mutableStateOf("") }
+    var passphrase by rememberSaveable { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
@@ -525,9 +560,9 @@ private fun SearchProviderDialog(
     onSave: (SearchProviderConfig) -> Unit,
     onDelete: (() -> Unit)?,
 ) {
-    var name by remember { mutableStateOf(existing?.name.orEmpty()) }
-    var url by remember { mutableStateOf(existing?.url.orEmpty()) }
-    var apiKey by remember { mutableStateOf(existing?.apiKey.orEmpty()) }
+    var name by rememberSaveable { mutableStateOf(existing?.name.orEmpty()) }
+    var url by rememberSaveable { mutableStateOf(existing?.url.orEmpty()) }
+    var apiKey by rememberSaveable { mutableStateOf(existing?.apiKey.orEmpty()) }
 
     AlertDialog(
         onDismissRequest = onDismiss,

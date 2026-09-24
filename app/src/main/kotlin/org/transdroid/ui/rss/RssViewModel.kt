@@ -54,8 +54,9 @@ data class RssItemsUiState(
 
 class RssViewModel(private val container: AppContainer) : ViewModel() {
 
-    val feeds: StateFlow<List<RssFeed>> = container.profilesRepository.feeds
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    /** Null until the store has emitted, so screens can tell "loading" from "no feeds". */
+    val feeds: StateFlow<List<RssFeed>?> = container.profilesRepository.feeds
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     private val _items = MutableStateFlow(RssItemsUiState())
     val items: StateFlow<RssItemsUiState> = _items.asStateFlow()
@@ -74,34 +75,34 @@ class RssViewModel(private val container: AppContainer) : ViewModel() {
 
     /** Loads a feed's items and remembers the previous last-viewed time for "new" badges. */
     fun openFeed(feedId: String) {
-        val feed = feeds.value.firstOrNull { it.id == feedId }
-            ?: run {
-                // The feeds flow may not have emitted yet; resolve from the store
-                viewModelScope.launch {
-                    container.profilesRepository.feeds.first().firstOrNull { it.id == feedId }?.let { openFeed(it) }
-                }
-                return
-            }
-        openFeed(feed)
-    }
-
-    private fun openFeed(feed: RssFeed) {
-        // Cancel any still-running fetch so a slow previous feed cannot overwrite this one
+        // One job per open: a lookup still resolving for feed A must not be able to fire
+        // after the user has already opened feed B
         fetchJob?.cancel()
-        _items.value = RssItemsUiState(feed = feed, loading = true, newSinceTimestamp = feed.lastViewedTimestamp)
         fetchJob = viewModelScope.launch {
-            try {
-                val channel = container.rssFetcher.fetch(feed.url)
-                val items = channel.items.sortedByDescending { it.timestamp ?: Long.MIN_VALUE }
-                _items.update { it.copy(loading = false, items = items) }
-                val newest = items.firstNotNullOfOrNull { item -> item.timestamp }
-                if (newest != null && newest != feed.lastViewedTimestamp) {
-                    container.profilesRepository.markFeedViewed(feed.id, newest)
-                }
+            val feed = feeds.value?.firstOrNull { it.id == feedId }
+                // The feeds flow may not have emitted yet; resolve from the store
+                ?: container.profilesRepository.feeds.first().firstOrNull { it.id == feedId }
+                ?: return@launch
+            _items.value = RssItemsUiState(feed = feed, loading = true, newSinceTimestamp = feed.lastViewedTimestamp)
+            val items = try {
+                container.rssFetcher.fetch(feed.url).items.sortedByDescending { it.timestamp ?: Long.MIN_VALUE }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 _items.update { it.copy(loading = false, error = e.toUiError(feed.displayName)) }
+                return@launch
+            }
+            _items.update { it.copy(loading = false, items = items) }
+            // Bookkeeping only: a failed write must not turn a loaded feed into an error screen
+            val newest = items.firstNotNullOfOrNull { item -> item.timestamp }
+            if (newest != null && newest != feed.lastViewedTimestamp) {
+                try {
+                    container.profilesRepository.markFeedViewed(feed.id, newest)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // The "new" badges simply persist until a later successful write
+                }
             }
         }
     }

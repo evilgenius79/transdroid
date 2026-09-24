@@ -24,7 +24,9 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import java.util.UUID
 import javax.crypto.AEADBadTagException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.first
@@ -44,6 +46,7 @@ import org.transdroid.protocol.CertificateFingerprint
 import org.transdroid.protocol.Tls
 import org.transdroid.protocol.discovery.DiscoveredDaemon
 import org.transdroid.ui.torrents.UiError
+import org.transdroid.ui.torrents.detailChain
 import org.transdroid.ui.torrents.toUiError
 
 sealed class TestState {
@@ -77,10 +80,34 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
     private val _testState = MutableStateFlow<TestState>(TestState.Idle)
     val testState: StateFlow<TestState> = _testState.asStateFlow()
 
+    /** A failed settings write (Keystore or disk), shown once by the settings screen. */
+    private val _writeError = MutableStateFlow<UiError?>(null)
+    val writeError: StateFlow<UiError?> = _writeError.asStateFlow()
+
+    fun clearWriteError() {
+        _writeError.value = null
+    }
+
+    /**
+     * Every store write goes through here: the Keystore can fail on a write just as it can
+     * on a read, and an unhandled exception in viewModelScope takes the process down.
+     */
+    private fun launchWrite(block: suspend () -> Unit) {
+        viewModelScope.launch {
+            try {
+                block()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _writeError.value = UiError.Unexpected(e.detailChain() ?: e.javaClass.simpleName)
+            }
+        }
+    }
+
     fun newProfileId(): String = UUID.randomUUID().toString()
 
     fun save(profile: ServerProfile) {
-        viewModelScope.launch {
+        launchWrite {
             // Read from the repository, not the StateFlow, which may not have emitted yet
             val firstServer = container.profilesRepository.profiles.first().isEmpty()
             container.profilesRepository.save(profile)
@@ -89,7 +116,7 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     fun delete(profileId: String) {
-        viewModelScope.launch {
+        launchWrite {
             val wasActive = container.settingsRepository.activeServerId.first() == profileId
             container.profilesRepository.delete(profileId)
             if (wasActive) container.settingsRepository.setActiveServer(null)
@@ -97,7 +124,7 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     fun setActive(profileId: String) {
-        viewModelScope.launch { container.settingsRepository.setActiveServer(profileId) }
+        launchWrite { container.settingsRepository.setActiveServer(profileId) }
     }
 
     fun testConnection(profile: ServerProfile) {
@@ -137,14 +164,17 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
 
     private val _discovery = MutableStateFlow(DiscoveryState())
     val discovery: StateFlow<DiscoveryState> = _discovery.asStateFlow()
+    private var scanJob: Job? = null
 
     /** Scans the local network once per settings session; no-op while already scanning. */
     fun startLanScan() {
         if (_discovery.value.scanning) return
         _discovery.value = DiscoveryState(scanning = true)
-        viewModelScope.launch {
+        scanJob = viewModelScope.launch {
             val found = try {
                 container.lanDiscovery.scan()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 emptyList()
             }
@@ -152,15 +182,22 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
+    /** Leaving the add-server screen: a sweep of 700+ sockets must not outlive it. */
+    fun stopLanScan() {
+        scanJob?.cancel()
+        scanJob = null
+        _discovery.value = DiscoveryState()
+    }
+
     val searchProviders: StateFlow<List<SearchProviderConfig>> = container.profilesRepository.searchProviders
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     fun saveSearchProvider(provider: SearchProviderConfig) {
-        viewModelScope.launch { container.profilesRepository.saveSearchProvider(provider) }
+        launchWrite { container.profilesRepository.saveSearchProvider(provider) }
     }
 
     fun deleteSearchProvider(providerId: String) {
-        viewModelScope.launch { container.profilesRepository.deleteSearchProvider(providerId) }
+        launchWrite { container.profilesRepository.deleteSearchProvider(providerId) }
     }
 
     val notifyFinished: StateFlow<Boolean> = container.settingsRepository.notifyFinished
@@ -174,14 +211,14 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
         )
 
     fun setPollInterval(seconds: Int) {
-        viewModelScope.launch { container.settingsRepository.setPollIntervalSeconds(seconds) }
+        launchWrite { container.settingsRepository.setPollIntervalSeconds(seconds) }
     }
 
     val themeMode: StateFlow<org.transdroid.data.ThemeMode> = container.settingsRepository.themeMode
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), org.transdroid.data.ThemeMode.SYSTEM)
 
     fun setThemeMode(mode: org.transdroid.data.ThemeMode) {
-        viewModelScope.launch { container.settingsRepository.setThemeMode(mode) }
+        launchWrite { container.settingsRepository.setThemeMode(mode) }
     }
 
     val swipeRightAction: StateFlow<org.transdroid.data.SwipeAction> = container.settingsRepository.swipeRightAction
@@ -191,16 +228,16 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), org.transdroid.data.SwipeAction.REMOVE)
 
     fun setSwipeRightAction(action: org.transdroid.data.SwipeAction) {
-        viewModelScope.launch { container.settingsRepository.setSwipeRightAction(action) }
+        launchWrite { container.settingsRepository.setSwipeRightAction(action) }
     }
 
     fun setSwipeLeftAction(action: org.transdroid.data.SwipeAction) {
-        viewModelScope.launch { container.settingsRepository.setSwipeLeftAction(action) }
+        launchWrite { container.settingsRepository.setSwipeLeftAction(action) }
     }
 
     /** Persists the toggle and (un)schedules the background check accordingly. */
     fun setNotifyFinished(context: android.content.Context, enabled: Boolean) {
-        viewModelScope.launch {
+        launchWrite {
             container.settingsRepository.setNotifyFinished(enabled)
             if (enabled) {
                 FinishedTorrentsWorker.schedule(context.applicationContext)
@@ -210,21 +247,47 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
+    sealed class BackupState {
+        data object Idle : BackupState()
+        data object Creating : BackupState()
+        data class Ready(val bytes: ByteArray) : BackupState()
+        data object Failed : BackupState()
+    }
+
+    /**
+     * Exposed as state rather than a callback: key derivation takes up to a second, during
+     * which the screen can be recreated, and a callback into a dead composition would
+     * launch the document picker from an unregistered launcher.
+     */
+    private val _backupState = MutableStateFlow<BackupState>(BackupState.Idle)
+    val backupState: StateFlow<BackupState> = _backupState.asStateFlow()
+
     /** Serializes and encrypts the whole settings store with the given passphrase. */
-    fun createBackup(passphrase: String, onReady: (ByteArray) -> Unit) {
+    fun createBackup(passphrase: String) {
+        _backupState.value = BackupState.Creating
         viewModelScope.launch {
-            val data = container.profilesRepository.currentData()
-            val bytes = withContext(Dispatchers.Default) {
-                BackupCrypto.encrypt(
-                    backupJson.encodeToString(ProfilesData.serializer(), data).encodeToByteArray(),
-                    passphrase.toCharArray(),
-                )
+            _backupState.value = try {
+                val data = container.profilesRepository.currentData()
+                val bytes = withContext(Dispatchers.Default) {
+                    BackupCrypto.encrypt(
+                        backupJson.encodeToString(ProfilesData.serializer(), data).encodeToByteArray(),
+                        passphrase.toCharArray(),
+                    )
+                }
+                BackupState.Ready(bytes)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                BackupState.Failed
             }
-            onReady(bytes)
         }
     }
 
-    fun restoreBackup(bytes: ByteArray, passphrase: String, onResult: (RestoreResult) -> Unit) {
+    fun consumeBackup() {
+        _backupState.value = BackupState.Idle
+    }
+
+    fun restoreBackup(bytes: ByteArray, passphrase: String) {
         viewModelScope.launch {
             val result = try {
                 val plaintext = withContext(Dispatchers.Default) {
@@ -240,11 +303,21 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
                 RestoreResult.Success(data.profiles.size)
             } catch (e: AEADBadTagException) {
                 RestoreResult.WrongPassphrase
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 RestoreResult.InvalidFile
             }
-            onResult(result)
+            _restoreResult.value = result
         }
+    }
+
+    /** Same reasoning as [backupState]: survives the screen being recreated mid-restore. */
+    private val _restoreResult = MutableStateFlow<RestoreResult?>(null)
+    val restoreResult: StateFlow<RestoreResult?> = _restoreResult.asStateFlow()
+
+    fun consumeRestoreResult() {
+        _restoreResult.value = null
     }
 
     sealed class RestoreResult {

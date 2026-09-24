@@ -57,6 +57,13 @@ class QbittorrentAdapter(
     @Volatile
     private var sessionCookie: String? = null
 
+    /**
+     * When qBittorrent has said "Fails." to these credentials, re-sending them on every
+     * poll would get the address banned within a minute; hold off before trying again.
+     */
+    @Volatile
+    private var credentialsRejectedUntil: Long = 0L
+
     override suspend fun testConnection(): String {
         val version = get("api/v2/app/version").use { it.readBodyOrThrow() }
         return "qBittorrent $version"
@@ -213,6 +220,9 @@ class QbittorrentAdapter(
     }
 
     private suspend fun login() {
+        if (System.currentTimeMillis() < credentialsRejectedUntil) {
+            throw DaemonException.Authentication("qBittorrent rejected the username/password")
+        }
         val form = FormBody.Builder()
             .add("username", config.username.orEmpty())
             .add("password", config.password.orEmpty())
@@ -227,6 +237,7 @@ class QbittorrentAdapter(
             }
             val body = response.body?.string().orEmpty()
             if (!response.isSuccessful || body.trim() != "Ok.") {
+                credentialsRejectedUntil = System.currentTimeMillis() + LOGIN_RETRY_HOLDOFF_MILLIS
                 throw DaemonException.Authentication("qBittorrent rejected the username/password")
             }
             // The session cookie is SID= historically; qBittorrent 5.1+ issues a
@@ -260,7 +271,15 @@ class QbittorrentAdapter(
             response = send(build())
         }
         when {
-            response.code == 401 || response.code == 403 -> {
+            // qBittorrent uses 401 only for its Host-header / cross-site checks, never credentials
+            response.code == 401 -> {
+                response.close()
+                throw DaemonException.Authentication(
+                    "qBittorrent refused the request's Host header — in qBittorrent's WebUI options " +
+                        "disable 'Validate HTTP Host header' or add this address to its server domains"
+                )
+            }
+            response.code == 403 -> {
                 response.close()
                 throw DaemonException.Authentication(
                     if (apiKey != null) {
@@ -359,5 +378,6 @@ class QbittorrentAdapter(
     private companion object {
         /** qBittorrent reports 8640000 seconds as "no ETA". */
         const val INFINITE_ETA = 8640000L
+        const val LOGIN_RETRY_HOLDOFF_MILLIS = 60_000L
     }
 }

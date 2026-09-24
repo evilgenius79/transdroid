@@ -58,6 +58,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -136,8 +137,10 @@ fun TorrentDetailsContent(
     onRemoved: (() -> Unit)? = null,
 ) {
     val ui by viewModel.ui.collectAsStateWithLifecycle()
-    var showRemoveDialog by remember { mutableStateOf(false) }
-    var trackerToRemove by remember { mutableStateOf<TrackerInfo?>(null) }
+    // Saveable so a rotation mid-confirmation keeps the dialog (and its checkbox) up
+    var showRemoveDialog by rememberSaveable(torrent.id) { mutableStateOf(false) }
+    var trackerToRemoveUrl by rememberSaveable(torrent.id) { mutableStateOf<String?>(null) }
+    val trackerToRemove = trackerToRemoveUrl?.let { url -> ui.trackers[torrent.id]?.firstOrNull { it.url == url } }
 
     LaunchedEffect(torrent.id) {
         viewModel.loadFiles(torrent.id)
@@ -150,6 +153,10 @@ fun TorrentDetailsContent(
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
     ) {
+        ui.actionError?.let { error ->
+            ActionErrorBanner(error = error, onDismiss = { viewModel.clearActionError() })
+            Spacer(Modifier.height(8.dp))
+        }
         Text(torrent.name, style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(12.dp))
         FlatProgressBar(
@@ -178,7 +185,7 @@ fun TorrentDetailsContent(
 
         Spacer(Modifier.height(16.dp))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            val paused = torrent.status == TorrentStatus.PAUSED
+            val paused = torrent.status.isStopped
             Button(onClick = { viewModel.toggleStartPause(torrent) }) {
                 Icon(
                     if (paused) Icons.Default.PlayArrow else Icons.Default.Pause,
@@ -263,7 +270,7 @@ fun TorrentDetailsContent(
                             )
                         }
                     }
-                    IconButton(onClick = { trackerToRemove = tracker }) {
+                    IconButton(onClick = { trackerToRemoveUrl = tracker.url }) {
                         Icon(
                             Icons.Default.Close,
                             contentDescription = stringResource(R.string.details_tracker_remove),
@@ -346,19 +353,19 @@ fun TorrentDetailsContent(
 
     trackerToRemove?.let { tracker ->
         AlertDialog(
-            onDismissRequest = { trackerToRemove = null },
+            onDismissRequest = { trackerToRemoveUrl = null },
             title = { Text(stringResource(R.string.details_tracker_remove_title)) },
             text = { Text(stringResource(R.string.details_tracker_remove_message, tracker.url)) },
             confirmButton = {
                 TextButton(onClick = {
-                    trackerToRemove = null
+                    trackerToRemoveUrl = null
                     viewModel.removeTracker(torrent.id, tracker)
                 }) {
                     Text(stringResource(R.string.details_remove_confirm))
                 }
             },
             dismissButton = {
-                TextButton(onClick = { trackerToRemove = null }) {
+                TextButton(onClick = { trackerToRemoveUrl = null }) {
                     Text(stringResource(R.string.details_cancel))
                 }
             },
@@ -373,7 +380,7 @@ fun RemoveTorrentDialog(
     onDismiss: () -> Unit,
     onConfirm: (alsoDeleteData: Boolean) -> Unit,
 ) {
-    var alsoDeleteData by remember { mutableStateOf(false) }
+    var alsoDeleteData by rememberSaveable { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.details_remove_title)) },

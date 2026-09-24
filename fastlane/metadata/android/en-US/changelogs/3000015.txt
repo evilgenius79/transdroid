@@ -1,0 +1,16 @@
+Audit round: ~50 fixes across the app.
+• Fix rTorrent, RSS and search on real devices (XML parser setup only
+  worked on the build machine)
+• Widgets update instantly after taps and refresh themselves when stale
+• Errored torrents can be started again; Transmission ids survive daemon
+  restarts; clearer messages for IP whitelist / Host header rejections
+• qBittorrent: a wrong password no longer gets your IP banned by retrying
+  every poll; custom headers no longer break session cookies
+• Deluge 1.3 file priorities; Test connection catches a disconnected web UI
+• RSS dates with zone names (UTC, EST, PDT…), correct feed encodings
+• Settings survive Keystore hiccups and never export an empty backup;
+  server delete asks first; dialogs and edits survive rotation
+• Details screen keeps updating while open and shows action failures
+• Requests are cancelled when you leave, replies are size-capped, parsing
+  runs off the main thread; IPv6 hosts, non-ASCII passwords, shared text
+  with a title before the link, and many smaller fixes

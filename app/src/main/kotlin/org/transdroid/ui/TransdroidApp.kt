@@ -19,6 +19,9 @@ package org.transdroid.ui
 import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -72,6 +75,16 @@ fun TransdroidApp(
         if (pendingTorrentUrl != null) {
             navController.navigate(Routes.add(pendingTorrentUrl))
             onPendingTorrentUrlConsumed()
+        }
+    }
+
+    // Poll while the app is started, whichever screen is on top: the details screen
+    // shows live progress from the same state, so polling must not stop when the list
+    // leaves composition on phones
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            torrentsViewModel.pollLoop()
         }
     }
 
@@ -131,7 +144,9 @@ fun TransdroidApp(
             AddTorrentScreen(
                 viewModel = torrentsViewModel,
                 initialUrl = entry.arguments?.getString("url").orEmpty(),
-                onDone = { navController.popBackStack() },
+                // Completion can arrive after the user already left this screen; only
+                // ever pop the Add entry itself, never whatever is on top by then
+                onDone = { navController.popBackStack(Routes.ADD, inclusive = true) },
             )
         }
         composable(Routes.SETTINGS) {

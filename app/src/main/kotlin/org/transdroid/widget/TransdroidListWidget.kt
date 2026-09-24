@@ -18,6 +18,8 @@ package org.transdroid.widget
 
 import android.content.Context
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -89,11 +91,15 @@ class TransdroidListWidget : GlanceAppWidget() {
     )
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val state = context.appContainer.widgetStateRepository.current()
-        val ui = buildUi(context, state)
+        refreshSnapshotIfStale(context, STALE_AFTER_MILLIS)
+        val repository = context.appContainer.widgetStateRepository
+        val initial = repository.current()
+        // Glance keeps this session alive for a while after rendering; collecting the
+        // snapshot flow (rather than reading it once) makes every write show up at once
         provideContent {
+            val state by repository.state.collectAsState(initial)
             GlanceTheme {
-                WidgetContent(ui)
+                WidgetContent(buildUi(context, state))
             }
         }
     }
@@ -116,7 +122,7 @@ class TransdroidListWidget : GlanceAppWidget() {
                 detailText = detail,
                 progress = torrent.progress,
                 status = torrent.status,
-                paused = torrent.status == TorrentStatus.PAUSED,
+                paused = torrent.status.isStopped,
                 showToggle = torrent.id.isNotBlank() && torrent.status in TOGGLABLE_STATUSES,
             )
         }
@@ -273,7 +279,9 @@ class TransdroidListWidget : GlanceAppWidget() {
             TorrentStatus.SEEDING,
             TorrentStatus.QUEUED,
             TorrentStatus.PAUSED,
+            TorrentStatus.ERROR,
         )
+        const val STALE_AFTER_MILLIS = 10L * 60 * 1000
     }
 }
 

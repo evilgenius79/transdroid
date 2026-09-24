@@ -3,6 +3,7 @@
     "torrents": [
       {
         "id": 1,
+        "hashString": "8c212779b4abde7c6bc608063a0d008b7e40ce32",
         "name": "ubuntu-24.04.2-desktop-amd64.iso",
         "status": 4,
         "percentDone": 0.4266,
@@ -23,6 +24,7 @@
       },
       {
         "id": 2,
+        "hashString": "2b3ddb2e0b1c7a5a3e2f4d9c8b7a6f5e4d3c2b1a",
         "name": "debian-12.7.0-amd64-netinst.iso",
         "status": 6,
         "percentDone": 1,
@@ -41,6 +43,7 @@
       },
       {
         "id": 3,
+        "hashString": "3c4eec3f1c2d8b6b4f3a5e0d9c8b7a6f5e4d3c2b",
         "name": "archlinux-2025.07.01-x86_64.iso",
         "status": 0,
         "percentDone": 0.12,
@@ -58,6 +61,7 @@
       },
       {
         "id": 4,
+        "hashString": "4d5ffd4a2d3e9c7c5a4b6f1e0d9c8b7a6f5e4d3c",
         "name": "unregistered.torrent",
         "status": 0,
         "percentDone": 0.5,
@@ -76,6 +80,7 @@
       },
       {
         "id": 5,
+        "hashString": "5e6aae5b3e4fad8d6b5c7a2f1e0d9c8b7a6f5e4d",
         "name": "ida93sp2",
         "status": 4,
         "percentDone": 0,

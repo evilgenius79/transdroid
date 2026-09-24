@@ -53,8 +53,9 @@ data class SearchUiState(
 
 class SearchViewModel(private val container: AppContainer) : ViewModel() {
 
-    val providers: StateFlow<List<SearchProviderConfig>> = container.profilesRepository.searchProviders
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    /** Null until the store has emitted, so the screen can tell "loading" from "none configured". */
+    val providers: StateFlow<List<SearchProviderConfig>?> = container.profilesRepository.searchProviders
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     private val _ui = MutableStateFlow(SearchUiState())
     val ui: StateFlow<SearchUiState> = _ui.asStateFlow()
@@ -72,8 +73,9 @@ class SearchViewModel(private val container: AppContainer) : ViewModel() {
     fun search() {
         val query = _ui.value.query.trim()
         if (query.isEmpty()) return
-        val provider = providers.value.firstOrNull { it.id == _ui.value.selectedProviderId }
-            ?: providers.value.firstOrNull()
+        val available = providers.value.orEmpty()
+        val provider = available.firstOrNull { it.id == _ui.value.selectedProviderId }
+            ?: available.firstOrNull()
             ?: return
         searchJob?.cancel()
         _ui.update { it.copy(searching = true, error = null) }
