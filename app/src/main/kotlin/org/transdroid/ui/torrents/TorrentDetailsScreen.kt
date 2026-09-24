@@ -62,7 +62,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -145,7 +147,9 @@ fun TorrentDetailsContent(
     LaunchedEffect(torrent.id) {
         viewModel.loadFiles(torrent.id)
         viewModel.loadTrackers(torrent.id)
+        viewModel.loadComment(torrent.id)
     }
+    val uriHandler = LocalUriHandler.current
 
     Column(
         Modifier
@@ -236,6 +240,33 @@ fun TorrentDetailsContent(
             )
         }
         torrent.downloadDir?.let { DetailRow(stringResource(R.string.details_location), it) }
+        ui.comments[torrent.id]?.let { comment ->
+            // Trackers put the torrent's web page in the comment; make that a tappable link
+            val link = WEB_LINK_PATTERN.find(comment)?.value
+            if (link != null) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable { runCatching { uriHandler.openUri(link) } }
+                        .padding(vertical = 3.dp),
+                ) {
+                    Text(
+                        stringResource(R.string.details_web_link),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.fillMaxWidth(0.35f),
+                    )
+                    Text(
+                        link,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        textDecoration = TextDecoration.Underline,
+                    )
+                }
+            } else {
+                DetailRow(stringResource(R.string.details_comment), comment)
+            }
+        }
 
         Spacer(Modifier.height(24.dp))
         Text(
@@ -406,6 +437,8 @@ fun RemoveTorrentDialog(
         },
     )
 }
+
+private val WEB_LINK_PATTERN = Regex("""https?://[^\s<>"]+""")
 
 @Composable
 private fun FilePriority.label(): String = stringResource(

@@ -165,6 +165,15 @@ class TransmissionAdapter(
         request("torrent-reannounce") { putIds(torrentId) }
     }
 
+    override suspend fun torrentComment(torrentId: String): String? {
+        val arguments = request("torrent-get") {
+            putIds(torrentId)
+            put("fields", buildJsonArray { add("comment") })
+        }
+        return arguments["torrents"]?.jsonArray?.firstOrNull()?.jsonObject
+            ?.get("comment")?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+    }
+
     override suspend fun listTrackers(torrentId: String): List<TrackerInfo> {
         val arguments = request("torrent-get") {
             putIds(torrentId)

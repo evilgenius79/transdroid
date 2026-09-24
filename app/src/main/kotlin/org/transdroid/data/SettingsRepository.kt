@@ -43,6 +43,14 @@ class SettingsRepository(private val context: Context) {
     private val themeModeKey = stringPreferencesKey("theme_mode")
     private val swipeRightKey = stringPreferencesKey("swipe_right_action")
     private val swipeLeftKey = stringPreferencesKey("swipe_left_action")
+    private val torrentSortKey = stringPreferencesKey("torrent_sort")
+
+    /** The torrent list's sort order, as the enum name the UI layer owns; empty when unset. */
+    val torrentSort: Flow<String> = context.settingsDataStore.data.map { it[torrentSortKey] ?: "" }
+
+    suspend fun setTorrentSort(name: String) {
+        context.settingsDataStore.edit { it[torrentSortKey] = name }
+    }
 
     val activeServerId: Flow<String?> = context.settingsDataStore.data.map { it[activeServerKey] }
 

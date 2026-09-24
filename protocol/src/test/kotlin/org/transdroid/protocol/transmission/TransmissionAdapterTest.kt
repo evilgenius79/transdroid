@@ -171,6 +171,18 @@ class TransmissionAdapterTest {
     }
 
     @Test
+    fun `torrent comment is read from torrent-get`() = runTest {
+        server.enqueue(
+            MockResponse().setBody("""{"result":"success","arguments":{"torrents":[{"comment":"https://hdclub.com/torrents/1"}]}}""")
+        )
+        server.enqueue(MockResponse().setBody("""{"result":"success","arguments":{"torrents":[{"comment":""}]}}"""))
+
+        assertEquals("https://hdclub.com/torrents/1", adapter.torrentComment("7"))
+        assertTrue(server.takeRequest().body.readUtf8().contains("\"fields\":[\"comment\"]"))
+        assertNull(adapter.torrentComment("7"))
+    }
+
+    @Test
     fun `403 is explained as an rpc-whitelist rejection, not a bad password`() = runTest {
         server.enqueue(MockResponse().setResponseCode(403).setBody("<p>Unauthorized IP Address.</p>"))
 

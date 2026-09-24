@@ -303,6 +303,18 @@ class QbittorrentAdapterTest {
     }
 
     @Test
+    fun `torrent comment is read from the properties endpoint`() = runTest {
+        server.enqueue(loginOk())
+        server.enqueue(MockResponse().setBody("""{"save_path":"/dl","comment":"https://hdclub.com/torrents/1","seeds":3}"""))
+
+        val comment = adapter().torrentComment("abcdef")
+
+        server.takeRequest() // login
+        assertEquals("/api/v2/torrents/properties?hash=abcdef", server.takeRequest().path)
+        assertEquals("https://hdclub.com/torrents/1", comment)
+    }
+
+    @Test
     fun `reannounce posts hashes`() = runTest {
         server.enqueue(loginOk())
         server.enqueue(MockResponse().setBody(""))

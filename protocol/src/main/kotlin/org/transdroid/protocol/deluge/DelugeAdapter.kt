@@ -297,6 +297,12 @@ class DelugeAdapter(
         call("core.force_reannounce", buildJsonArray { add(torrentId) })
     }
 
+    override suspend fun torrentComment(torrentId: String): String? {
+        ensureAuthenticated()
+        val result = call("core.get_torrent_status", torrentId, buildJsonArray { add("comment") }) as? JsonObject
+        return result?.get("comment")?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+    }
+
     override suspend fun listTrackers(torrentId: String): List<TrackerInfo> {
         ensureAuthenticated()
         return fetchTrackers(torrentId).mapNotNull { tracker ->

@@ -48,6 +48,8 @@
     <string name="details_tracker_remove_title">Remove this tracker?</string>
     <string name="details_tracker_remove_message">%1$s will no longer be announced to for this torrent.</string>
     <string name="details_reannounce">Re-announce</string>
+    <string name="details_web_link">Web page</string>
+    <string name="details_comment">Comment</string>
     <string name="details_progress">Progress</string>
     <string name="details_size">Size</string>
     <string name="details_downloaded">Downloaded</string>

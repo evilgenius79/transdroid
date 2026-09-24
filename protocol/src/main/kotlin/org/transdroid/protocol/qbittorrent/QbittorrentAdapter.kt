@@ -173,6 +173,16 @@ class QbittorrentAdapter(
         post("api/v2/torrents/reannounce", form).use { it.readBodyOrThrow() }
     }
 
+    override suspend fun torrentComment(torrentId: String): String? {
+        val body = get("api/v2/torrents/properties?hash=$torrentId").use { it.readBodyOrThrow() }
+        val properties = try {
+            json.decodeFromString<TorrentProperties>(body)
+        } catch (e: Exception) {
+            throw DaemonException.UnexpectedResponse("Cannot parse qBittorrent torrent properties", e)
+        }
+        return properties.comment.takeIf { it.isNotBlank() }
+    }
+
     override suspend fun listTrackers(torrentId: String): List<TrackerInfo> {
         val body = get("api/v2/torrents/trackers?hash=$torrentId").use { it.readBodyOrThrow() }
         val trackers = try {
@@ -358,6 +368,9 @@ class QbittorrentAdapter(
             metadataProgress = if (state == "metaDL" || state == "forcedMetaDL") 0f else null,
         )
     }
+
+    @Serializable
+    private data class TorrentProperties(val comment: String = "")
 
     @Serializable
     private data class TrackerEntry(

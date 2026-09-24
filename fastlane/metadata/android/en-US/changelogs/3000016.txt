@@ -1,0 +1,4 @@
+• The chosen sort order is remembered across app restarts
+• Torrent list rows show downloaded / uploaded totals per torrent
+• Torrent details show the torrent's web page (from its comment) as a
+  tappable link — Transmission, qBittorrent and Deluge

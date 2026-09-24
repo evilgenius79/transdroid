@@ -116,6 +116,8 @@ data class TorrentsUiState(
     val selectedTorrentId: String? = null,
     val files: Map<String, List<TorrentFile>> = emptyMap(),
     val trackers: Map<String, List<TrackerInfo>> = emptyMap(),
+    /** Torrent comments already fetched (null value = fetched, but the torrent has none). */
+    val comments: Map<String, String?> = emptyMap(),
     val swipeRightAction: SwipeAction = SwipeAction.PAUSE_RESUME,
     val swipeLeftAction: SwipeAction = SwipeAction.REMOVE,
     /**
@@ -174,6 +176,7 @@ class TorrentsViewModel(private val container: AppContainer) : ViewModel() {
                             hasLoaded = false,
                             files = emptyMap(),
                             trackers = emptyMap(),
+                            comments = emptyMap(),
                             selectedTorrentId = null,
                             error = null,
                             actionError = null,
@@ -189,6 +192,12 @@ class TorrentsViewModel(private val container: AppContainer) : ViewModel() {
                 container.settingsRepository.swipeLeftAction,
             ) { right, left -> right to left }.collect { (right, left) ->
                 _ui.update { it.copy(swipeRightAction = right, swipeLeftAction = left) }
+            }
+        }
+        viewModelScope.launch {
+            val saved = container.settingsRepository.torrentSort.first()
+            TorrentSort.entries.firstOrNull { it.name == saved }?.let { sort ->
+                _ui.update { it.copy(sort = sort) }
             }
         }
     }
@@ -232,6 +241,32 @@ class TorrentsViewModel(private val container: AppContainer) : ViewModel() {
 
     fun setSort(sort: TorrentSort) {
         _ui.update { it.copy(sort = sort) }
+        viewModelScope.launch {
+            try {
+                container.settingsRepository.setTorrentSort(sort.name)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // The in-memory choice still applies for this session
+            }
+        }
+    }
+
+    fun loadComment(torrentId: String) {
+        val profile = _ui.value.activeProfile ?: return
+        if (torrentId in _ui.value.comments) return
+        viewModelScope.launch {
+            try {
+                val comment = container.adapterFor(profile).torrentComment(torrentId)
+                _ui.update {
+                    if (it.activeProfile?.id != profile.id) it else it.copy(comments = it.comments + (torrentId to comment))
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // No comment row then; the list-level error banner covers connectivity
+            }
+        }
     }
 
     fun setLabelFilter(label: String?) {

@@ -74,6 +74,13 @@ interface DaemonAdapter {
      * tracker is permanently disabled instead and no longer listed.
      */
     suspend fun removeTracker(torrentId: String, tracker: TrackerInfo)
+
+    /**
+     * The torrent's comment as stored in its metadata — for tracker torrents typically the
+     * torrent's web page URL. Null when the client has no such data (rTorrent's XML-RPC
+     * does not expose it) or the torrent has none.
+     */
+    suspend fun torrentComment(torrentId: String): String?
 }
 
 object DaemonAdapterFactory {
@@ -145,6 +152,7 @@ private class BackgroundDispatchingAdapter(private val delegate: DaemonAdapter) 
     override suspend fun forceReannounce(torrentId: String) = io { forceReannounce(torrentId) }
     override suspend fun listTrackers(torrentId: String): List<TrackerInfo> = io { listTrackers(torrentId) }
     override suspend fun removeTracker(torrentId: String, tracker: TrackerInfo) = io { removeTracker(torrentId, tracker) }
+    override suspend fun torrentComment(torrentId: String): String? = io { torrentComment(torrentId) }
 
     private suspend fun <T> io(block: suspend DaemonAdapter.() -> T): T = withContext(Dispatchers.IO) { delegate.block() }
 }

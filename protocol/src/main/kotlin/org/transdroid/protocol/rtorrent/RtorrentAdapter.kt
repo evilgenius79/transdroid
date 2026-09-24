@@ -198,6 +198,9 @@ class RtorrentAdapter(
         call("d.tracker_announce", torrentId)
     }
 
+    /** rTorrent keeps no metadata comment reachable over XML-RPC; ruTorrent parses the file itself. */
+    override suspend fun torrentComment(torrentId: String): String? = null
+
     override suspend fun listTrackers(torrentId: String): List<TrackerInfo> {
         val rows = call("t.multicall", torrentId, "", "t.url=", "t.is_enabled=") as? List<*>
             ?: throw DaemonException.UnexpectedResponse("Unexpected t.multicall reply")
