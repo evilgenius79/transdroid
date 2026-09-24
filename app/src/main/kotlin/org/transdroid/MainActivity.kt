@@ -17,14 +17,17 @@
 package org.transdroid
 
 import android.content.Intent
+import android.graphics.Color
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -59,13 +62,29 @@ class MainActivity : ComponentActivity() {
         setContent {
             val themeMode by appContainer.settingsRepository.themeMode
                 .collectAsStateWithLifecycle(initialValue = initialThemeMode)
-            TransdroidTheme(
-                darkTheme = when (themeMode) {
-                    ThemeMode.SYSTEM -> isSystemInDarkTheme()
-                    ThemeMode.LIGHT -> false
-                    ThemeMode.DARK -> true
-                },
-            ) {
+            val darkTheme = when (themeMode) {
+                ThemeMode.SYSTEM -> isSystemInDarkTheme()
+                ThemeMode.LIGHT -> false
+                ThemeMode.DARK -> true
+            }
+            // The default edge-to-edge style picks status/navigation bar icon colors from
+            // the *system* dark mode; with the in-app override they must follow our theme,
+            // or dark icons land on a dark bar (and vice versa)
+            LaunchedEffect(darkTheme) {
+                enableEdgeToEdge(
+                    statusBarStyle = if (darkTheme) {
+                        SystemBarStyle.dark(Color.TRANSPARENT)
+                    } else {
+                        SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
+                    },
+                    navigationBarStyle = if (darkTheme) {
+                        SystemBarStyle.dark(Color.TRANSPARENT)
+                    } else {
+                        SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
+                    },
+                )
+            }
+            TransdroidTheme(darkTheme = darkTheme) {
                 val windowSizeClass = calculateWindowSizeClass(this)
                 TransdroidApp(
                     useTwoPane = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Expanded,

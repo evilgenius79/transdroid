@@ -1,0 +1,2 @@
+• Status bar and navigation bar icons now follow the app's theme setting,
+  so forcing Dark (or Light) no longer leaves them unreadable
