@@ -62,7 +62,7 @@ class FinishedTorrentsWorker(
             return Result.success()
         }
 
-        container.widgetStateRepository.update(profile.displayName, torrents)
+        container.widgetStateRepository.update(profile.id, profile.displayName, torrents)
 
         val previouslyUnfinished = container.settingsRepository.unfinishedTorrentIds(profile.id).first()
         val newlyFinished = torrents.filter { it.isFinished && it.id in previouslyUnfinished }
