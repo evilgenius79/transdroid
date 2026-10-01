@@ -18,6 +18,8 @@ package org.transdroid.protocol
 
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -93,10 +95,22 @@ object DaemonAdapterFactory {
         .build()
 
     fun create(config: DaemonConfig, httpClient: OkHttpClient = defaultHttpClient()): DaemonAdapter {
-        var client = config.pinnedCertSha256
+        if (TransportPolicy.credentialedCleartextToPublicHost(config)) {
+            throw DaemonException.Connection(
+                "Refusing to send credentials to ${config.host} over HTTP — use HTTPS, or a local-network address"
+            )
+        }
+        // Never follow redirects on a credentialed client: OkHttp would keep Cookie,
+        // Authorization and a 307/308 body, and a daemon or proxy could move them off-host
+        // or down to HTTP.
+        var client = httpClient.newBuilder()
+            .followRedirects(false)
+            .followSslRedirects(false)
+            .build()
+        client = config.pinnedCertSha256
             ?.takeIf { it.isNotBlank() }
-            ?.let { Tls.clientWithPinnedCertificate(httpClient, it) }
-            ?: httpClient
+            ?.let { Tls.clientWithPinnedCertificate(client, it) }
+            ?: client
         if (config.customHeaders.isNotEmpty()) {
             client = client.newBuilder().addInterceptor { chain ->
                 chain.proceed(withCustomHeaders(chain.request(), config.customHeaders))
@@ -138,6 +152,8 @@ object DaemonAdapterFactory {
 private class BackgroundDispatchingAdapter(private val delegate: DaemonAdapter) : DaemonAdapter {
     override val config: DaemonConfig get() = delegate.config
 
+    private val callLock = Mutex()
+
     override suspend fun testConnection(): String = io { testConnection() }
     override suspend fun listTorrents(): List<Torrent> = io { listTorrents() }
     override suspend fun addByUrl(url: String, startPaused: Boolean) = io { addByUrl(url, startPaused) }
@@ -154,5 +170,6 @@ private class BackgroundDispatchingAdapter(private val delegate: DaemonAdapter) 
     override suspend fun removeTracker(torrentId: String, tracker: TrackerInfo) = io { removeTracker(torrentId, tracker) }
     override suspend fun torrentComment(torrentId: String): String? = io { torrentComment(torrentId) }
 
-    private suspend fun <T> io(block: suspend DaemonAdapter.() -> T): T = withContext(Dispatchers.IO) { delegate.block() }
+    private suspend fun <T> io(block: suspend DaemonAdapter.() -> T): T =
+        withContext(Dispatchers.IO) { callLock.withLock { delegate.block() } }
 }
