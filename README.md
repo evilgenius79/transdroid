@@ -13,9 +13,10 @@ Manage torrents from your Android device.
 Download
 ========
 
-Grab the latest APK from [Releases](../../releases/latest) — download **`app-full-debug.apk`**,
-which is signed and installs directly. The optimized `release` APKs are published unsigned
-until release signing keys are configured, and unsigned APKs cannot be installed as-is.
+Grab the latest APK from [Releases](../../releases/latest) — download **`app-full-release.apk`**.
+It is a release build with debugging disabled. If the repository has no release signing
+secrets, that APK is signed with an ephemeral CI key; uninstall it before installing a
+build signed with a different key.
 
 Features
 ========
