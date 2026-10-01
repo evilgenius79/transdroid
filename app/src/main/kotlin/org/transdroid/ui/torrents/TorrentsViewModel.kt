@@ -33,6 +33,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicInteger
 import org.transdroid.AppContainer
 import org.transdroid.appContainer
 import org.transdroid.data.ServerProfile
@@ -214,19 +215,24 @@ class TorrentsViewModel(private val container: AppContainer) : ViewModel() {
         viewModelScope.launch { refreshNow(showSpinner) }
     }
 
+    private val refreshGeneration = AtomicInteger(0)
+
     private suspend fun refreshNow(showSpinner: Boolean) {
         val profile = _ui.value.activeProfile ?: return
+        val generation = refreshGeneration.incrementAndGet()
         if (showSpinner) _ui.update { it.copy(refreshing = true) }
         try {
             val torrents = container.adapterFor(profile).listTorrents()
-            // A late result from a server the user already switched away from is stale
-            // for the list and for the widget alike
+            // A late result from a server the user already switched away from, or from an
+            // older overlapping poll, must not clobber a newer list or paint a stale error
+            if (generation != refreshGeneration.get()) return
             if (_ui.value.activeProfile?.id != profile.id) return
             _ui.update { it.copy(torrents = torrents, hasLoaded = true, refreshing = false, error = null) }
-            container.widgetStateRepository.update(profile.displayName, torrents)
+            container.widgetStateRepository.update(profile.id, profile.displayName, torrents)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            if (generation != refreshGeneration.get()) return
             _ui.update {
                 // A late failure from a server the user already switched away from is stale
                 if (it.activeProfile?.id != profile.id) it

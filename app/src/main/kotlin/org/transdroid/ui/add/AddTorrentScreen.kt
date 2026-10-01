@@ -95,13 +95,17 @@ fun AddTorrentScreen(
     var error by remember { mutableStateOf<UiError?>(null) }
     var fileReadFailed by remember { mutableStateOf(false) }
 
-    // Saveable so activity recreation cannot re-fire the single-server auto-submit
+    // External VIEW/SEND file intents must not auto-submit: another app could launch this
+    // activity and write a torrent using saved credentials. Auto-submit only a file the
+    // user picked inside the app.
+    var ownerPickedFile by rememberSaveable { mutableStateOf(false) }
     var autoSubmitted by rememberSaveable { mutableStateOf(false) }
 
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
+        if (uri != null && uri.scheme == "content") {
             fileUri = uri.toString()
             invalidInput = false
+            ownerPickedFile = true
             autoSubmitted = false
         }
     }
@@ -143,8 +147,8 @@ fun AddTorrentScreen(
     // With a single configured server there is nothing to choose: a picked or opened
     // .torrent file is added right away instead of asking for another confirming tap.
     // (The paused checkbox sits above the picker, so that choice still comes first.)
-    LaunchedEffect(fileUri, ui.profileCount) {
-        if (fileUri != null && ui.profileCount == 1 && !autoSubmitted &&
+    LaunchedEffect(fileUri, ui.profileCount, ownerPickedFile) {
+        if (ownerPickedFile && fileUri != null && ui.profileCount == 1 && !autoSubmitted &&
             !submitting && error == null && !fileReadFailed
         ) {
             autoSubmitted = true

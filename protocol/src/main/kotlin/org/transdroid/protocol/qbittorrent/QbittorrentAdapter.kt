@@ -346,7 +346,7 @@ class QbittorrentAdapter(
                 "downloading", "metaDL", "forcedDL", "stalledDL", "forcedMetaDL" -> TorrentStatus.DOWNLOADING
                 "uploading", "stalledUP", "forcedUP" -> TorrentStatus.SEEDING
                 "pausedDL", "pausedUP", "stoppedDL", "stoppedUP" -> TorrentStatus.PAUSED
-                "checkingDL", "checkingUP", "checkingResumeData", "allocating" -> TorrentStatus.CHECKING
+                "checkingDL", "checkingUP", "checkingResumeData", "allocating", "moving" -> TorrentStatus.CHECKING
                 "queuedDL", "queuedUP" -> TorrentStatus.QUEUED
                 "error", "missingFiles" -> TorrentStatus.ERROR
                 else -> TorrentStatus.UNKNOWN

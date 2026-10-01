@@ -85,7 +85,7 @@ class TransdroidListWidget : GlanceAppWidget() {
         val speeds: String?,
         val emptyText: String?,
         val rows: List<RowUi>,
-        val refreshDescription: String,
+        val profileId: String?,
         val startDescription: String,
         val pauseDescription: String,
     )
@@ -137,6 +137,7 @@ class TransdroidListWidget : GlanceAppWidget() {
                 else -> null
             },
             rows = rows,
+            profileId = state.profileId,
             refreshDescription = context.getString(R.string.torrents_refresh),
             startDescription = context.getString(R.string.details_start),
             pauseDescription = context.getString(R.string.details_pause),
@@ -246,6 +247,7 @@ class TransdroidListWidget : GlanceAppWidget() {
                                 actionParametersOf(
                                     TorrentIdParam to row.id,
                                     TorrentPausedParam to row.paused,
+                                    ProfileIdParam to (ui.profileId ?: ""),
                                 )
                             )
                         ),

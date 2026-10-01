@@ -129,7 +129,7 @@ fun SettingsScreen(
     ) { uri ->
         val bytes = pendingBackup
         pendingBackup = null
-        if (uri != null) {
+        if (uri != null && uri.scheme == "content") {
             scope.launch {
                 val ok = bytes != null && withContext(Dispatchers.IO) {
                     try {
@@ -140,6 +140,8 @@ fun SettingsScreen(
                 }
                 snackbarHostState.showSnackbar(if (ok) exportWrittenMessage else exportFailedMessage)
             }
+        } else if (uri != null) {
+            scope.launch { snackbarHostState.showSnackbar(exportFailedMessage) }
         }
     }
 
@@ -181,7 +183,7 @@ fun SettingsScreen(
     }
 
     val importPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) importUri = uri
+        if (uri != null && uri.scheme == "content") importUri = uri
     }
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
@@ -446,6 +448,7 @@ private const val MAX_BACKUP_BYTES = 10 * 1024 * 1024
  * memory — the picker accepts any file, and a mis-picked video must not be an OOM crash.
  */
 private fun readBackupFile(context: android.content.Context, uri: Uri): ByteArray? = try {
+    if (uri.scheme != "content") return null
     context.contentResolver.openInputStream(uri)?.use { stream ->
         val output = java.io.ByteArrayOutputStream()
         val buffer = ByteArray(64 * 1024)
