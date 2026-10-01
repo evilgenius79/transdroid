@@ -62,7 +62,8 @@ class RssFetcher(private val httpClient: OkHttpClient) {
         // decode it, which a String conversion here would silently override with UTF-8.
         // Do not follow redirects when the URL carries a query or userinfo: that token
         // is commonly a passkey and must not be replayed onto another host.
-        val client = if ('?' in url || "@" in url.substringBefore('/', url.indexOf("://").let { if (it < 0) 0 else it + 3 })) {
+        val authority = url.substringAfter("://", url).substringBefore('/')
+        val client = if ('?' in url || '@' in authority) {
             httpClient.newBuilder().followRedirects(false).followSslRedirects(false).build()
         } else {
             httpClient
