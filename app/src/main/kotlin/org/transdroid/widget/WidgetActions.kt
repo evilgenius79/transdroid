@@ -32,6 +32,7 @@ private const val TAG = "TransdroidWidget"
 
 val TorrentIdParam = ActionParameters.Key<String>("torrent_id")
 val TorrentPausedParam = ActionParameters.Key<Boolean>("torrent_paused")
+val ProfileIdParam = ActionParameters.Key<String>("profile_id")
 
 /**
  * Widgets have no room for error banners, so actions confirm receipt with a toast and
@@ -56,10 +57,15 @@ class ToggleTorrentAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         val torrentId = parameters[TorrentIdParam] ?: return
         val paused = parameters[TorrentPausedParam] ?: return
+        val profileId = parameters[ProfileIdParam] ?: return
         val container = context.appContainer
         val profile = container.activeProfile.first()
         if (profile == null) {
             toast(context, context.getString(R.string.widget_no_server))
+            return
+        }
+        if (profile.id != profileId) {
+            toast(context, context.getString(R.string.widget_action_failed, context.getString(R.string.widget_no_server)))
             return
         }
         toast(
@@ -94,7 +100,7 @@ private suspend fun refreshSnapshot(context: Context): String? {
         ?: return context.getString(R.string.widget_no_data)
     return try {
         val torrents = container.adapterFor(profile).listTorrents()
-        container.widgetStateRepository.update(profile.displayName, torrents)
+        container.widgetStateRepository.update(profile.id, profile.displayName, torrents)
         null
     } catch (e: Exception) {
         Log.e(TAG, "Widget refresh failed", e)

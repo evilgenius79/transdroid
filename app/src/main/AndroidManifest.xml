@@ -43,6 +43,19 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="application/x-bittorrent" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" android:mimeType="application/octet-stream" android:pathPattern=".*\\.torrent" />
+                <data android:scheme="file" android:mimeType="application/octet-stream" android:pathPattern=".*\\.torrent" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="http" android:pathPattern=".*\\.torrent" />
+                <data android:scheme="https" android:pathPattern=".*\\.torrent" />
+            </intent-filter>
         </activity>
 
         <receiver
