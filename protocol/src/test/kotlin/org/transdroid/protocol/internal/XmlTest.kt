@@ -52,4 +52,16 @@ class XmlTest {
 
         assertEquals("Amélie", document.documentElement.childText("title"))
     }
+
+    @Test
+    fun `utf-16 documents declaring a DTD are refused`() {
+        val xxe = """<?xml version="1.0"?><!DOCTYPE root [<!ENTITY secret SYSTEM "file:///etc/passwd">]><root/>"""
+        val utf16 = xxe.toByteArray(Charsets.UTF_16LE)
+
+        try {
+            parseXmlSafely(utf16)
+            fail("Expected the UTF-16 DTD to be refused")
+        } catch (expected: IllegalArgumentException) {
+        }
+    }
 }

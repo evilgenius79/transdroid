@@ -22,6 +22,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.transdroid.protocol.DaemonException
+import org.transdroid.protocol.TransportPolicy
 import org.transdroid.protocol.internal.childElements
 import org.transdroid.protocol.internal.childText
 import org.transdroid.protocol.internal.executeOnIo
@@ -57,6 +58,11 @@ class TorznabProvider(
 ) : SearchProvider {
 
     override suspend fun search(query: String): List<SearchResult> {
+        if (!apiKey.isNullOrBlank() && TransportPolicy.rejectsCleartextSecretUrl(endpointUrl)) {
+            throw DaemonException.Connection(
+                "Refusing to send the indexer API key over HTTP — use an https:// Torznab URL"
+            )
+        }
         val url = endpointUrl.toHttpUrlOrNull()
             ?.newBuilder()
             ?.addQueryParameter("t", "search")
@@ -64,7 +70,7 @@ class TorznabProvider(
             ?.apply { if (!apiKey.isNullOrBlank()) addQueryParameter("apikey", apiKey) }
             ?.build()
             ?: throw DaemonException.UnexpectedResponse("Invalid Torznab endpoint URL")
-        val body = httpClient.executeOnIo(Request.Builder().url(url).get().build()).use { response ->
+        val body = secretSafeClient().executeOnIo(Request.Builder().url(url).get().build()).use { response ->
             when {
                 response.code == 401 || response.code == 403 ->
                     throw DaemonException.Authentication("The indexer rejected the API key")
@@ -75,6 +81,11 @@ class TorznabProvider(
         }
         return withContext(Dispatchers.Default) { parse(body) }
     }
+
+    /** An API key in the query must not survive a redirect onto another host or onto HTTP. */
+    private fun secretSafeClient(): OkHttpClient =
+        if (apiKey.isNullOrBlank()) httpClient
+        else httpClient.newBuilder().followRedirects(false).followSslRedirects(false).build()
 
     internal fun parse(xml: String): List<SearchResult> = parse(xml.toByteArray(Charsets.UTF_8))
 

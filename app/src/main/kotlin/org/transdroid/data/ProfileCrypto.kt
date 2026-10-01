@@ -43,7 +43,9 @@ internal object KeystoreProfilesCipher : ProfilesCipher {
     private const val TRANSFORMATION = "AES/GCM/NoPadding"
     private const val TAG_LENGTH_BITS = 128
 
-    private fun key(): SecretKey {
+    private val keyLock = Any()
+
+    private fun key(): SecretKey = synchronized(keyLock) {
         val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         (keyStore.getKey(KEY_ALIAS, null) as? SecretKey)?.let { return it }
         val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
@@ -54,7 +56,12 @@ internal object KeystoreProfilesCipher : ProfilesCipher {
                 .setKeySize(256)
                 .build()
         )
-        return generator.generateKey()
+        try {
+            generator.generateKey()
+        } catch (e: Exception) {
+            // A concurrent first launch may have created the alias between getKey and generateKey
+            (keyStore.apply { load(null) }.getKey(KEY_ALIAS, null) as? SecretKey) ?: throw e
+        }
     }
 
     override fun encrypt(plaintext: ByteArray): ByteArray {

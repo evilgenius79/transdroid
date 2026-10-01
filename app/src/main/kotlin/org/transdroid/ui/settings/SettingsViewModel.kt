@@ -241,6 +241,20 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
             container.settingsRepository.setNotifyFinished(enabled)
             if (enabled) {
                 FinishedTorrentsWorker.schedule(context.applicationContext)
+                val profile = container.activeProfile.first()
+                if (profile != null) {
+                    try {
+                        val torrents = container.adapterFor(profile).listTorrents()
+                        container.settingsRepository.setUnfinishedTorrentIds(
+                            profile.id,
+                            torrents.filterNot { it.isFinished }.map { it.id }.toSet(),
+                        )
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        // The next periodic run seeds the set if this one could not reach the server
+                    }
+                }
             } else {
                 FinishedTorrentsWorker.cancel(context.applicationContext)
             }

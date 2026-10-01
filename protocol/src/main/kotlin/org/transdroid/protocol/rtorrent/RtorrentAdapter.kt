@@ -151,9 +151,19 @@ class RtorrentAdapter(
 
     override suspend fun remove(torrentId: String, deleteData: Boolean) {
         if (deleteData) {
-            // ruTorrent convention: an event hook on custom5 erases the data on removal.
-            // Harmless when no such hook is configured; rTorrent itself never deletes data.
-            call("d.custom5.set", torrentId, "1")
+            // Stock rTorrent can delete the tied .torrent file; the data itself is only
+            // erased when a ruTorrent-style event hook watches custom5. Both are attempted
+            // so "remove with data" does as much as this daemon allows.
+            try {
+                call("d.delete_tied", torrentId)
+            } catch (e: DaemonException.UnexpectedResponse) {
+                // Older builds or a missing tied file; still erase the download
+            }
+            try {
+                call("d.custom5.set", torrentId, "1")
+            } catch (e: DaemonException.UnexpectedResponse) {
+                // Harmless when the host forbids custom fields
+            }
         }
         call("d.erase", torrentId)
     }

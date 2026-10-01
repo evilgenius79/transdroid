@@ -83,7 +83,7 @@ class DelugeAdapter(
         } catch (e: DaemonException.UnexpectedResponse) {
             null
         }
-        if (connected == false) {
+        if (connected == false && !reconnectDaemon()) {
             throw DaemonException.UnexpectedResponse(
                 "Deluge's web interface is not connected to its daemon — open the Deluge web UI and pick the daemon in its connection manager"
             )
@@ -141,7 +141,15 @@ class DelugeAdapter(
                 buildJsonArray { TORRENT_KEYS.forEach { add(it) } },
             )
         } catch (e: DaemonException.UnexpectedResponse) {
-            explainIfDaemonDisconnected(e)
+            if (reconnectDaemon()) {
+                call(
+                    "core.get_torrents_status",
+                    buildJsonObject {},
+                    buildJsonArray { TORRENT_KEYS.forEach { add(it) } },
+                )
+            } else {
+                explainIfDaemonDisconnected(e)
+            }
         }
         val torrents = result as? JsonObject
             ?: throw DaemonException.UnexpectedResponse("Unexpected core.get_torrents_status reply")
@@ -164,6 +172,27 @@ class DelugeAdapter(
             )
         }
         throw original
+    }
+
+    /**
+     * After a daemon restart deluge-web stays up but drops its daemon session. Re-attach
+     * to the first configured host and report whether that succeeded.
+     */
+    private suspend fun reconnectDaemon(): Boolean {
+        val hosts = try {
+            call("web.get_hosts") as? JsonArray
+        } catch (e: Exception) {
+            return false
+        } ?: return false
+        val hostId = hosts.firstNotNullOfOrNull { element ->
+            (element as? JsonArray)?.firstOrNull()?.jsonPrimitive?.contentOrNull
+        } ?: return false
+        return try {
+            call("web.connect", hostId)
+            call("web.connected").jsonPrimitive.booleanOrNull != false
+        } catch (e: Exception) {
+            false
+        }
     }
 
     private fun parseTorrent(hash: String, obj: JsonObject): Torrent {

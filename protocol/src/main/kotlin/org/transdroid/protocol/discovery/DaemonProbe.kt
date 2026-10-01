@@ -64,7 +64,7 @@ object DaemonProbe {
         val form = FormBody.Builder().add("username", "").add("password", "").build()
         val request = Request.Builder().url("http://$host:$port/api/v2/auth/login").post(form).build()
         return tryRequest(client, request) { response ->
-            val body = if (response.code == 200) response.body?.string().orEmpty().trim() else ""
+            val body = if (response.code == 200) response.bodyPrefix() else ""
             if (body == "Fails." || body == "Ok.") DiscoveredDaemon(DaemonType.QBITTORRENT, host, port) else null
         }
     }
@@ -76,7 +76,7 @@ object DaemonProbe {
             .post(body.toRequestBody("application/json".toMediaType()))
             .build()
         return tryRequest(client, request) { response ->
-            val text = if (response.code == 200) response.body?.string().orEmpty() else ""
+            val text = if (response.code == 200) response.bodyPrefix() else ""
             if (text.contains("\"result\"") && text.contains("\"error\"")) {
                 DiscoveredDaemon(DaemonType.DELUGE, host, port)
             } else {
@@ -102,4 +102,17 @@ object DaemonProbe {
             null
         }
     }
+
+    /**
+     * Identification replies are a few dozen bytes. Cap the decompressed read so a LAN
+     * device cannot gzip-bomb the scan into an OOM.
+     */
+    private fun okhttp3.Response.bodyPrefix(maxBytes: Long = PROBE_BODY_BYTES): String {
+        val source = body?.source() ?: return ""
+        source.request(maxBytes)
+        val count = minOf(maxBytes, source.buffer.size)
+        return source.readUtf8(count).trim()
+    }
+
+    private const val PROBE_BODY_BYTES = 4L * 1024
 }

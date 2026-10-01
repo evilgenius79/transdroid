@@ -46,6 +46,7 @@ data class WidgetTorrent(
 )
 
 data class WidgetState(
+    val profileId: String? = null,
     val serverName: String? = null,
     val downloadingCount: Int = 0,
     val seedingCount: Int = 0,
@@ -64,6 +65,7 @@ data class WidgetState(
 class WidgetStateRepository(private val context: Context) {
 
     private val serverKey = stringPreferencesKey("server_name")
+    private val profileKey = stringPreferencesKey("profile_id")
     private val downloadingKey = intPreferencesKey("downloading_count")
     private val seedingKey = intPreferencesKey("seeding_count")
     private val pausedKey = intPreferencesKey("paused_count")
@@ -76,6 +78,7 @@ class WidgetStateRepository(private val context: Context) {
 
     val state: Flow<WidgetState> = context.widgetDataStore.data.map { prefs ->
         WidgetState(
+            profileId = prefs[profileKey],
             serverName = prefs[serverKey],
             downloadingCount = prefs[downloadingKey] ?: 0,
             seedingCount = prefs[seedingKey] ?: 0,
@@ -98,8 +101,9 @@ class WidgetStateRepository(private val context: Context) {
     @Volatile
     private var lastWritten: WidgetState? = null
 
-    suspend fun update(serverName: String, torrents: List<Torrent>) {
+    suspend fun update(profileId: String, serverName: String, torrents: List<Torrent>) {
         val snapshot = WidgetState(
+            profileId = profileId,
             serverName = serverName,
             downloadingCount = torrents.count { it.status == TorrentStatus.DOWNLOADING },
             seedingCount = torrents.count { it.status == TorrentStatus.SEEDING },
@@ -130,6 +134,7 @@ class WidgetStateRepository(private val context: Context) {
         lastWritten = snapshot
         context.widgetDataStore.edit { prefs ->
             prefs[serverKey] = snapshot.serverName!!
+            prefs[profileKey] = snapshot.profileId!!
             prefs[downloadingKey] = snapshot.downloadingCount
             prefs[seedingKey] = snapshot.seedingCount
             prefs[pausedKey] = snapshot.pausedCount

@@ -26,6 +26,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.transdroid.protocol.DaemonException
+import org.transdroid.protocol.TransportPolicy
 import org.transdroid.protocol.internal.childElements
 import org.transdroid.protocol.internal.childText
 import org.transdroid.protocol.internal.executeOnIo
@@ -51,10 +52,22 @@ data class RssChannel(
 class RssFetcher(private val httpClient: OkHttpClient) {
 
     suspend fun fetch(url: String): RssChannel {
+        if (TransportPolicy.rejectsCleartextSecretUrl(url)) {
+            throw DaemonException.Connection(
+                "Refusing to fetch a private feed over HTTP — use an https:// URL"
+            )
+        }
         val request = Request.Builder().url(url).get().build()
         // Keep the raw bytes: the feed's own <?xml encoding?> declaration decides how to
-        // decode it, which a String conversion here would silently override with UTF-8
-        val body = httpClient.executeOnIo(request).use { response ->
+        // decode it, which a String conversion here would silently override with UTF-8.
+        // Do not follow redirects when the URL carries a query or userinfo: that token
+        // is commonly a passkey and must not be replayed onto another host.
+        val client = if ('?' in url || "@" in url.substringBefore('/', url.indexOf("://").let { if (it < 0) 0 else it + 3 })) {
+            httpClient.newBuilder().followRedirects(false).followSslRedirects(false).build()
+        } else {
+            httpClient
+        }
+        val body = client.executeOnIo(request).use { response ->
             if (!response.isSuccessful) {
                 throw DaemonException.UnexpectedResponse("Feed returned HTTP ${response.code}")
             }

@@ -26,7 +26,7 @@ jobs:
         run: ./gradlew :app:testFullDebugUnitTest :app:lintFullDebug
 
       - name: Assemble APKs
-        run: ./gradlew :app:assembleFullDebug :app:assembleLiteDebug
+        run: ./gradlew :app:assembleFullDebug :app:assembleLiteDebug :app:assembleFullRelease
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4

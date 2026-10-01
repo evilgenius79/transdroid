@@ -112,7 +112,8 @@ class MainActivity : ComponentActivity() {
         if (intent == null || intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return null
         return when (intent.action) {
             Intent.ACTION_VIEW -> intent.dataString?.takeIf {
-                it.startsWith("magnet:") || it.startsWith("content:") || it.startsWith("file:")
+                it.startsWith("magnet:") || it.startsWith("content:") || it.startsWith("file:") ||
+                    it.startsWith("http://") || it.startsWith("https://")
             }
             // Shared text is commonly "Title\nhttps://…"; take the first link wherever it sits
             Intent.ACTION_SEND -> intent.getStringExtra(Intent.EXTRA_TEXT)

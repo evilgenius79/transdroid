@@ -150,17 +150,20 @@ class RtorrentAdapterTest {
     }
 
     @Test
-    fun `remove with data sets the rutorrent erase-data marker first`() = runTest {
+    fun `remove with data deletes the tied torrent then sets the erase marker`() = runTest {
+        server.enqueue(xmlResponse("<i8>0</i8>"))
         server.enqueue(xmlResponse("<i8>0</i8>"))
         server.enqueue(xmlResponse("<i8>0</i8>"))
 
         adapter.remove("ABCDEF", deleteData = true)
 
         val first = server.takeRequest().body.readUtf8()
-        assertTrue(first.contains("<methodName>d.custom5.set</methodName>"))
+        assertTrue(first.contains("<methodName>d.delete_tied</methodName>"))
         val second = server.takeRequest().body.readUtf8()
-        assertTrue(second.contains("<methodName>d.erase</methodName>"))
-        assertTrue(second.contains("ABCDEF"))
+        assertTrue(second.contains("<methodName>d.custom5.set</methodName>"))
+        val third = server.takeRequest().body.readUtf8()
+        assertTrue(third.contains("<methodName>d.erase</methodName>"))
+        assertTrue(third.contains("ABCDEF"))
     }
 
     @Test

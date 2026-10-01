@@ -63,13 +63,34 @@ internal fun parseXmlSafely(bytes: ByteArray): Document {
 }
 
 private fun rejectDtd(bytes: ByteArray) {
-    // Scan as Latin-1 so the check is byte-exact regardless of the declared encoding;
-    // the markers are pure ASCII in every ASCII-compatible encoding
-    val text = String(bytes, Charsets.ISO_8859_1)
+    // Honor a BOM or a UTF-16 declaration so a non-Latin-1 encoding cannot hide a DTD
+    // from the ASCII scan. None of the XML this app consumes needs a DTD.
+    val text = decodeForDtdScan(bytes)
     if (text.contains("<!DOCTYPE", ignoreCase = true) || text.contains("<!ENTITY", ignoreCase = true)) {
         throw IllegalArgumentException("XML documents with a DTD are not accepted")
     }
 }
+
+private fun decodeForDtdScan(bytes: ByteArray): String {
+    if (bytes.size >= 2 && bytes[0] == 0xFF.toByte() && bytes[1] == 0xFE.toByte()) {
+        return String(bytes, Charsets.UTF_16LE)
+    }
+    if (bytes.size >= 2 && bytes[0] == 0xFE.toByte() && bytes[1] == 0xFF.toByte()) {
+        return String(bytes, Charsets.UTF_16BE)
+    }
+    if (looksLikeUtf16Le(bytes)) return String(bytes, Charsets.UTF_16LE)
+    if (looksLikeUtf16Be(bytes)) return String(bytes, Charsets.UTF_16BE)
+    return String(bytes, Charsets.ISO_8859_1)
+}
+
+/** `<?` encoded as UTF-16 without a BOM. */
+private fun looksLikeUtf16Le(bytes: ByteArray): Boolean =
+    bytes.size >= 4 && bytes[0] == '<'.code.toByte() && bytes[1] == 0.toByte() &&
+        bytes[2] == '?'.code.toByte() && bytes[3] == 0.toByte()
+
+private fun looksLikeUtf16Be(bytes: ByteArray): Boolean =
+    bytes.size >= 4 && bytes[0] == 0.toByte() && bytes[1] == '<'.code.toByte() &&
+        bytes[2] == 0.toByte() && bytes[3] == '?'.code.toByte()
 
 internal fun Element.childElements(): List<Element> {
     val result = mutableListOf<Element>()
